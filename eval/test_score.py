@@ -8,7 +8,7 @@ import score as s  # noqa: E402
 
 def row(action, conf, expected, target=None, split="calibration"):
     d = {"action": action, "confidence": conf, "reroute_target": target}
-    return {"final": d, "jev": d, "expected": {"action": expected, "reroute_target": None}, "split": split}
+    return {"final": d, "fast": d, "expected": {"action": expected, "reroute_target": None}, "split": split}
 
 
 class ScoreTests(unittest.TestCase):

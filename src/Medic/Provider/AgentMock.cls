@@ -6,7 +6,7 @@ Class Medic.Provider.AgentMock Extends Medic.Provider.Base
 /// Placeholder for a frontier-model agent run.
 Parameter PRICEPERMTOKENS = 3;
 
-ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "") As %Status
+ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "", pConfig As %DynamicObject = "") As %Status
 {
 	set sc = $$$OK
 	try {

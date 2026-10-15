@@ -1,5 +1,5 @@
 /// Synchronous entry point for the eval runner. pHint names the target item
-/// (Medic.Triage for the full pipeline, Medic.Jev for the fast tier alone).
+/// (Medic.Triage for the full pipeline, Medic.FastTier for the fast tier alone).
 Class Medic.Eval.Service Extends Ens.BusinessService
 {
 

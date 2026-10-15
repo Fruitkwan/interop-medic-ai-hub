@@ -1,9 +1,9 @@
 """Score Interop Medic eval results and calibrate the auto-apply threshold.
 
-Reads the runner output (one line per case: the full pipeline's decision and Jev's alone) plus the
+Reads the runner output (one line per case: the full pipeline's decision and the fast tier's alone) plus the
 labelled dataset, then reports:
 
-1. Accuracy per corruption type, for the full pipeline and for Jev alone (the ablation).
+1. Accuracy per corruption type, for the full pipeline and for the fast tier alone (the ablation).
 2. Coverage vs risk: auto-apply every non-escalation decision with confidence >= t, and measure how
    often an auto-applied decision is wrong.
 3. A threshold with a statistical guarantee, picked on the calibration split (Learn then Test,
@@ -26,8 +26,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SYSTEMS = ("final", "jev")
-SYSTEM_NAMES = {"final": "Pipeline (agent + Jev)", "jev": "Jev alone"}
+SYSTEMS = ("final", "fast")
+SYSTEM_NAMES = {"final": "Pipeline (agent + fast tier)", "fast": "Fast tier alone"}
 GRID = [round(1 - i / 100, 2) for i in range(51)]  # 1.00 .. 0.50, for the curve
 CAL_GRID = [round(1 - i / 20, 2) for i in range(11)]  # 1.00 .. 0.50, fixed before seeing data
 ALPHAS = (0.02, 0.05, 0.10)
@@ -106,7 +106,7 @@ def report(rows: list[dict], delta: float) -> tuple[str, list[dict]]:
              f"Cases: {len(rows)} ({len(cal)} calibration, {len(test)} test). Providers: {', '.join(providers)}.", ""]
     if any("Mock" in p for p in providers):
         lines += ["> **Mock providers.** The mocks were written with the labels in view, so these numbers only show",
-                  "> the harness works. Real accuracy comes from re-running with Jev and the AI Hub agent.", ""]
+                  "> the harness works. Real accuracy comes from re-running with Jev or Laya and the AI Hub agent.", ""]
 
     lines += ["## Accuracy on the test split", "",
               "| Corruption | n | " + " | ".join(SYSTEM_NAMES[s] for s in SYSTEMS) + " |",

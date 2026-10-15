@@ -18,7 +18,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="Medic.Agent" Category="" ClassName="Medic.Operation.Agent" PoolSize="1" Enabled="true">
   </Item>
-  <Item Name="Medic.Jev" Category="" ClassName="Medic.Operation.Jev" PoolSize="1" Enabled="true">
+  <Item Name="Medic.FastTier" Category="" ClassName="Medic.Operation.FastTier" PoolSize="1" Enabled="true">
   </Item>
 </Production>
 }

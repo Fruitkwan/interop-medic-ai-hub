@@ -6,8 +6,9 @@ Class Medic.Provider.Base [ Abstract ]
 /// Placeholder USD per million input tokens; subclasses override.
 Parameter PRICEPERMTOKENS = 0;
 
-/// Fill pDecision for pReq. pHint is the fast-tier verdict when called from the agent tier.
-ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "") As %Status [ Abstract ]
+/// Fill pDecision for pReq. pHint is the fast-tier verdict when called from the agent tier;
+/// pConfig carries the calling operation's resolved settings (base URL, model, key, price).
+ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "", pConfig As %DynamicObject = "") As %Status [ Abstract ]
 {
 }
 

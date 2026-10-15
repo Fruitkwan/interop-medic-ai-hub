@@ -18,7 +18,7 @@ Property ProposedFix As %String(MAXLEN = "");
 Property RerouteTarget As %String(MAXLEN = 128);
 
 /// Which tier made the call.
-Property DecidedBy As %String(VALUELIST = ",jev,agent,human");
+Property DecidedBy As %String(VALUELIST = ",fast,agent,human");
 
 /// Provider class that produced it, so mock results are never mistaken for real model output.
 Property Provider As %String(MAXLEN = 128);

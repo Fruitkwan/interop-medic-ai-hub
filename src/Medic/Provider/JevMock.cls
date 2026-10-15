@@ -7,7 +7,7 @@ Class Medic.Provider.JevMock Extends Medic.Provider.Base
 /// Placeholder until Jev pricing is confirmed from TypeSafe's docs.
 Parameter PRICEPERMTOKENS = 0.04;
 
-ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "") As %Status
+ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decision, pHint As Medic.Msg.Decision = "", pConfig As %DynamicObject = "") As %Status
 {
 	set err = $zconvert(pReq.ErrorText, "L")
 	set raw = ..Raw(pReq)

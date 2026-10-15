@@ -1,7 +1,7 @@
 /// The decision agent. Every failed message comes here, so every decision is the agent's.
-/// Step 1 asks Jev (visible in the Visual Trace as a call to Medic.Jev); when Jev is confident and
-/// the case is low-stakes the agent accepts that verdict and stops. Otherwise it runs the full
-/// tool-using provider with Jev's verdict as a hint.
+/// Step 1 asks the fast tier (Jev, Laya or the mock; visible in the Visual Trace as a call to
+/// Medic.FastTier). When it is confident and the case is low-stakes the agent accepts that verdict
+/// and stops. Otherwise it runs the full tool-using provider with the fast verdict as a hint.
 Class Medic.Operation.Agent Extends Ens.BusinessOperation
 {
 
@@ -9,9 +9,9 @@ Parameter INVOCATION = "Queue";
 
 Property ProviderClass As %String(MAXLEN = 128) [ InitialExpression = "Medic.Provider.AgentMock" ];
 
-Property FastTarget As Ens.DataType.ConfigName [ InitialExpression = "Medic.Jev" ];
+Property FastTarget As Ens.DataType.ConfigName [ InitialExpression = "Medic.FastTier" ];
 
-/// Minimum Jev confidence to accept its verdict without running the full agent.
+/// Minimum fast-tier confidence to accept its verdict without running the full agent.
 Property FastConfidence As %Numeric [ InitialExpression = 0.85 ];
 
 /// Cases at or above this severity always get the full agent.
@@ -25,7 +25,8 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	set sc = ..SendRequestSync(..FastTarget, pRequest, .fast)
 	quit:$$$ISERR(sc) sc
 
-	if (fast.Confidence >= ..FastConfidence) && (fast.Severity < ..FastSeverityCeiling) {
+	// A reroute needs a target, which only the agent's routing tools can supply.
+	if (fast.Confidence >= ..FastConfidence) && (fast.Severity < ..FastSeverityCeiling) && (fast.Action '= "reroute") {
 		set pResponse = fast
 		quit $$$OK
 	}

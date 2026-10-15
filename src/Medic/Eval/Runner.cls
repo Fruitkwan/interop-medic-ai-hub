@@ -28,10 +28,10 @@ ClassMethod Run(pCases As %String = "/dataset/cases.jsonl", pOut As %String = "/
 
 			set target = "Medic.Triage"
 			$$$ThrowOnError(svc.ProcessInput(##class(Medic.Msg.FailedMessage).FromCase(case), .final, .target))
-			set target = "Medic.Jev"
+			set target = "Medic.FastTier"
 			$$$ThrowOnError(svc.ProcessInput(##class(Medic.Msg.FailedMessage).FromCase(case), .fast, .target))
 
-			do out.WriteLine({"case_id": (case."case_id"), "final": (..AsJSON(final)), "jev": (..AsJSON(fast))}.%ToJSON())
+			do out.WriteLine({"case_id": (case."case_id"), "final": (..AsJSON(final)), "fast": (..AsJSON(fast))}.%ToJSON())
 			set n = n + 1
 			quit:(pLimit > 0)&&(n >= pLimit)
 		}

@@ -15,3 +15,14 @@ services:
     volumes:
       - ./data:/data
       - ./dataset:/dataset:ro
+    # Fast tier: the offline mock by default. For Jev or Laya set MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne
+    # and SYSTEMONE_BASE_URL (put keys in a git-ignored .env file). See README.
+    environment:
+      MEDIC_FAST_PROVIDER: ${MEDIC_FAST_PROVIDER:-}
+      SYSTEMONE_BASE_URL: ${SYSTEMONE_BASE_URL:-}
+      SYSTEMONE_API_KEY: ${SYSTEMONE_API_KEY:-}
+      SYSTEMONE_MODEL: ${SYSTEMONE_MODEL:-}
+      SYSTEMONE_PRICE_PER_MTOK: ${SYSTEMONE_PRICE_PER_MTOK:-}
+    extra_hosts:
+      # Lets the container reach a Laya server on the host (Linux; Docker Desktop has this already).
+      - "host.docker.internal:host-gateway"
