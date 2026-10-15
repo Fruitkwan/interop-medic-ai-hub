@@ -1,0 +1,9 @@
+ zn "%SYS"
+ do ##class(%EnsembleMgr).EnableNamespace("USER", 1)
+ zn "USER"
+ set sc = $system.OBJ.LoadDir("/home/irisowner/medic/src", "ck", .errors, 1)
+ if 'sc do $system.Status.DisplayError(sc) do $system.Process.Terminate(, 1)
+ set sc = ##class(Medic.Setup).Run()
+ if 'sc do $system.Status.DisplayError(sc) do $system.Process.Terminate(, 1)
+ do ##class(Ens.Director).SetAutoStart("Medic.Production")
+ halt

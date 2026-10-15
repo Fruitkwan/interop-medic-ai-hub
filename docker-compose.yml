@@ -1,0 +1,12 @@
+services:
+  iris:
+    build: .
+    container_name: interop-medic
+    # Run IRIS directly; the image's post-start hook (namespace creation via Python dbapi) is not needed.
+    command: /iris-main --check-caps false --ISCAgent false
+    ports:
+      # Management Portal: http://localhost:52773/csp/sys/UtilHome.csp (override ports if taken)
+      - "${MEDIC_WEB_PORT:-52773}:52773"
+      - "${MEDIC_SS_PORT:-1972}:1972"
+    volumes:
+      - ./data:/data

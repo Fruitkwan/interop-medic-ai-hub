@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25">
+  <Document name="interop-medic.ZPM">
+    <Module>
+      <Name>interop-medic</Name>
+      <Version>0.1.0</Version>
+      <Description>An AI agent that triages failed HL7 and FHIR messages in IRIS Interoperability.</Description>
+      <Keywords>interoperability,hl7,fhir,ai,agent</Keywords>
+      <Packaging>module</Packaging>
+      <SourcesRoot>src</SourcesRoot>
+      <Resource Name="Medic.PKG"/>
+      <Invoke Class="Medic.Setup" Method="Run"/>
+      <SystemRequirements Interoperability="enabled"/>
+    </Module>
+  </Document>
+</Export>

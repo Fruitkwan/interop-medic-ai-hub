@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/in/
+data/done/
+data/cases/
+.env
