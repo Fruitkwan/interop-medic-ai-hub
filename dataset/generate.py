@@ -270,6 +270,21 @@ def c_unknown_receiver(rng):
                               fix_hint=f"MSH-5 '{bad}' is a variant of '{good}'; route to {ROUTING[good]}"))
 
 
+def c_unroutable(rng):
+    # Same error as a typo'd receiver, but nothing in the routing table is close - guessing a route is unsafe.
+    p, ts, cid = _patient(rng), _ts(rng), _control_id(rng)
+    bad = rng.choice(["BILLING", "ORDERCOMMS", "PHARMACY", "DIETARY", "CARDIO"])
+    raw = _hl7(adt_segments(p, bad, ts, cid))
+    err = _pick(rng, [
+        "ERROR <Ens>ErrNoRuleMatch: No routing rule matched MSH:5 '{v}'",
+        "ERROR: Router Medic.Router found no target for ReceivingApplication '{v}'",
+    ], v=bad)
+    return dict(format="hl7v2", message_type="ADT^A01", raw_message=raw, clean_message=None,
+                error_text=err, context=_context("Medic.To.EPR"), difficulty="hard",
+                expected=dict(action="escalate", severity=0.4,
+                              fix_hint=f"No route resembles '{bad}'; a new routing rule needs an owner"))
+
+
 def c_duplicate(rng):
     p, ts, cid = _patient(rng), _ts(rng), _control_id(rng)
     raw = _hl7(adt_segments(p, "EPR", ts, cid))
@@ -371,6 +386,7 @@ CORRUPTIONS: dict[str, Callable[[random.Random], dict]] = {
     "endpoint_timeout": c_endpoint_timeout,
     "outage_critical_result": c_outage_critical_result,
     "unknown_receiver": c_unknown_receiver,
+    "unroutable": c_unroutable,
     "duplicate": c_duplicate,
     "missing_mrn": c_missing_mrn,
     "patient_mismatch": c_patient_mismatch,
@@ -380,6 +396,9 @@ CORRUPTIONS: dict[str, Callable[[random.Random], dict]] = {
     "fhir_missing_subject": c_fhir_missing_subject,
     "fhir_server_5xx": c_fhir_server_5xx,
 }
+
+# Multiplier on n_per_type, so rarer actions still have enough cases to calibrate on.
+WEIGHTS = {"unknown_receiver": 3}
 
 
 # --------------------------------------------------------------------------- assembly
@@ -393,7 +412,7 @@ def generate(n_per_type: int = 25, seed: int = 7, calibration_share: float = 0.6
     rng = random.Random(seed)
     cases = []
     for corruption, build in CORRUPTIONS.items():
-        for i in range(n_per_type):
+        for i in range(n_per_type * WEIGHTS.get(corruption, 1)):
             case = build(rng)
             case_id = f"{corruption}-{seed}-{i:04d}"
             expected = {"reroute_target": None, **case.pop("expected")}

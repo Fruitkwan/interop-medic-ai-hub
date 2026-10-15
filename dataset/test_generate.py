@@ -21,7 +21,7 @@ class GenerateTests(unittest.TestCase):
     def test_every_corruption_has_n_cases_and_unique_ids(self):
         counts = Counter(c["corruption"] for c in self.cases)
         self.assertEqual(set(counts), set(g.CORRUPTIONS))
-        self.assertTrue(all(n == 20 for n in counts.values()))
+        self.assertEqual(counts, {k: 20 * g.WEIGHTS.get(k, 1) for k in g.CORRUPTIONS})
         self.assertEqual(len({c["case_id"] for c in self.cases}), len(self.cases))
 
     def test_labels_are_valid(self):
@@ -77,7 +77,7 @@ class GenerateTests(unittest.TestCase):
             out, cases_dir = Path(d) / "cases.jsonl", Path(d) / "in"
             g.main(["--n-per-type", "2", "--out", str(out), "--cases-dir", str(cases_dir)])
             lines = out.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(len(lines), 2 * len(g.CORRUPTIONS))
+            self.assertEqual(len(lines), sum(2 * g.WEIGHTS.get(k, 1) for k in g.CORRUPTIONS))
             self.assertEqual(len(list(cases_dir.glob("*.json"))), len(lines))
 
 

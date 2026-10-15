@@ -12,13 +12,7 @@ Method OnProcessInput(pInput As %Stream.Object, Output pOutput As %RegisteredObj
 {
 	set sc = $$$OK
 	try {
-		set case = {}.%FromJSON(pInput)
-		set req = ##class(Medic.Msg.FailedMessage).%New()
-		set req.CaseId = case."case_id"
-		set req.Format = case.format
-		do req.RawMessage.Write(case."raw_message")
-		set req.ErrorText = case."error_text"
-		set req.ContextJSON = case.context.%ToJSON()
+		set req = ##class(Medic.Msg.FailedMessage).FromCase({}.%FromJSON(pInput))
 		set sc = ..SendRequestAsync(..TargetConfigName, req)
 	} catch ex {
 		set sc = ex.AsStatus()

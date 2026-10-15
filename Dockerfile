@@ -1,4 +1,4 @@
-# Community image for now. Swap for the AI Hub Early Access image once licensing is confirmed.
+# Overridden by docker-compose (IRIS_IMAGE). The default runs the mock-only build without AI Hub.
 ARG IMAGE=intersystemsdc/iris-community:2026.2-zpm
 FROM $IMAGE
 

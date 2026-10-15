@@ -17,4 +17,16 @@ Property ContextJSON As %String(MAXLEN = "");
 /// Ens.MessageHeader ID of the original failed message, when triaging live traffic.
 Property OriginalHeaderId As %Integer;
 
+/// Build from one case of dataset/generate.py (labels are never copied in).
+ClassMethod FromCase(pCase As %DynamicObject) As Medic.Msg.FailedMessage
+{
+	set req = ..%New()
+	set req.CaseId = pCase."case_id"
+	set req.Format = pCase.format
+	do req.RawMessage.Write(pCase."raw_message")
+	set req.ErrorText = pCase."error_text"
+	set req.ContextJSON = pCase.context.%ToJSON()
+	quit req
+}
+
 }

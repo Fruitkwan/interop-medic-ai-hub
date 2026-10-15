@@ -1,6 +1,10 @@
 services:
   iris:
-    build: .
+    build:
+      context: .
+      args:
+        # Contest target: the AI Hub Early Access build, loaded and retagged locally (see README).
+        IMAGE: ${IRIS_IMAGE:-intersystemsdc/iris-community:2026.2-zpm}
     container_name: interop-medic
     # Run IRIS directly; the image's post-start hook (namespace creation via Python dbapi) is not needed.
     command: /iris-main --check-caps false --ISCAgent false
@@ -10,3 +14,4 @@ services:
       - "${MEDIC_SS_PORT:-1972}:1972"
     volumes:
       - ./data:/data
+      - ./dataset:/dataset:ro
