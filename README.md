@@ -33,10 +33,13 @@ without a person. `DryRun` is on by default.
 ## Run it
 
 ```bash
-python dataset/generate.py --n-per-type 25 --seed 7 --cases-dir data/cases
+python dataset/generate.py --synthea dataset/synthea --cases-dir data/cases
 docker compose up -d --build
-cp data/cases/outage_critical_result-7-000*.json data/in/
+python dataset/feed.py --count 20 --rate 1
 ```
+
+`feed.py` drips a shuffled mix of failed messages into the production. Use `--only
+outage_critical_result,patient_mismatch` to show the hard cases.
 
 Open the Management Portal at http://localhost:52773/csp/user/EnsPortal.ProductionConfig.zen
 (`_SYSTEM` / `SYS` on the community image) and look at the Visual Trace for each message.
@@ -125,7 +128,18 @@ docker exec -i interop-medic iris session IRIS -U USER <<< 'do ##class(%UnitTest
 ## Dataset
 
 `dataset/generate.py` writes 16 corruption types × N synthetic cases (reroutes weighted 3×), each
-with a known correct action. Some cases share an error message but need different actions depending on context. For
+with a known correct action. With `--synthea dataset/synthea`, patients and lab results come from
+[Synthea](https://github.com/synthetichealth/synthea), so names, ages and values look realistic.
+
+- **Patients:** 300 Synthea patients.
+- **Lab results:** their real potassium, sodium, glucose, haemoglobin, calcium, urea and chloride
+  results.
+- **Critical results:** Synthea values are almost all in range, so critical results are derived by
+  pushing a real result past its critical limit.
+- **The committed sample:** `dataset/synthea` is about 220 KB and keeps only ID, birth date, name and
+  sex, plus lab results. To rebuild it from a full Synthea CSV export, run
+  `python dataset/synthea_sample.py --src <export>/csv`.
+- **Without `--synthea`:** the generator uses its own made-up patients. Some cases share an error message but need different actions depending on context. For
 example, a timeout is normally a resend, but a critical potassium result stuck behind a 4-hour
 outage needs a person. Cases are split by hash into `calibration` (60%) and `test` (40%).
 

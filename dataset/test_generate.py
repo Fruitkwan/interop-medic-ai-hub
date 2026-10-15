@@ -81,5 +81,60 @@ class GenerateTests(unittest.TestCase):
             self.assertEqual(len(list(cases_dir.glob("*.json"))), len(lines))
 
 
+class LabTests(unittest.TestCase):
+    def test_critical_values_are_past_the_critical_limit(self):
+        rng = g.random.Random(1)
+        for code in g.CRITICAL_CODES:
+            _, _, _, _, clo, chi = g.LABS[code]
+            for _ in range(50):
+                lab = g.make_lab(rng, code, critical=True)
+                self.assertTrue(lab.value < clo or lab.value > chi, (code, lab.value))
+                self.assertIn(lab.flag, ("LL", "HH"))
+
+    def test_flags_follow_ranges(self):
+        rng = g.random.Random(1)
+        self.assertEqual(g.make_lab(rng, "6298-4", 4.2).flag, "N")
+        self.assertEqual(g.make_lab(rng, "6298-4", 5.6).flag, "H")
+        self.assertEqual(g.make_lab(rng, "6298-4", 2.1).flag, "LL")
+
+
+SAMPLE = Path(__file__).with_name("synthea")
+
+
+@unittest.skipUnless((SAMPLE / "patients.csv").exists(), "no Synthea sample")
+class SyntheaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.src = g.SyntheaSource(SAMPLE)
+        cls.cases = g.generate(n_per_type=10, seed=3, source=cls.src)
+
+    def test_deterministic(self):
+        self.assertEqual(self.cases, g.generate(n_per_type=10, seed=3, source=g.SyntheaSource(SAMPLE)))
+
+    def test_patients_come_from_the_sample(self):
+        names = {f"{p.family}^{p.given}" for p in self.src.patients}
+        for c in self.cases:
+            if c["format"] == "hl7v2" and c["corruption"] != "truncated":
+                pid = c["raw_message"].split("\rPID|")[1].split("|")
+                self.assertIn(pid[4], names, c["case_id"])
+            self.assertEqual(c["patients"], "synthea")
+
+    def test_mrn_is_stable_per_patient(self):
+        p = self.src.patients[0]
+        self.assertEqual(p.mrn, g.SyntheaSource.mrn(p.source_id))
+        self.assertRegex(p.mrn, r"^\d{8}$")
+
+    def test_normal_results_are_real_sample_values(self):
+        sample_values = {(code, v) for labs in self.src.labs.values() for code, v in labs}
+        for c in self.cases:
+            if c["corruption"] in ("endpoint_timeout", "patient_mismatch"):
+                obx = c["raw_message"].split("\rOBX|")[1].split("|")
+                code, value = obx[2].split("^")[0], float(obx[4])
+                self.assertIn((code, value), sample_values, c["case_id"])
+
+    def test_all_actions_still_represented(self):
+        self.assertEqual({c["expected"]["action"] for c in self.cases}, set(g.ACTIONS))
+
+
 if __name__ == "__main__":
     unittest.main()

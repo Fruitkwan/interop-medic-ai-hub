@@ -4,4 +4,6 @@ data/in/
 data/done/
 data/cases/
 data/results/
+# Full Synthea export (~80 MB); dataset/synthea holds the small committed sample.
+data/csv/
 .env
