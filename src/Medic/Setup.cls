@@ -19,6 +19,8 @@ ClassMethod Run() As %Status
 	quit:$$$ISERR(sc) sc
 	set sc = ..CreateTLSConfig()
 	quit:$$$ISERR(sc) sc
+	set sc = ..CreateWebApps()
+	quit:$$$ISERR(sc) sc
 	quit ..SetPasswords(..#DEMOPASSWORD)
 }
 
@@ -75,6 +77,42 @@ ClassMethod CreateTLSConfig() As %Status
 	quit ##class(Security.SSLConfigs).Create("MedicTLS")
 }
 
+/// Web apps for the judge page, created or updated in place so a rebuild or rerun is safe.
+/// Unauthenticated with role %All: a local demo, not for exposed hosts.
+/// /medic serves static files from the image; /medic/api dispatches to Medic.API.Dispatch.
+ClassMethod CreateWebApps() As %Status
+{
+	new $namespace
+	set $namespace = "%SYS"
+	kill props
+	set props("NameSpace") = "USER", props("Enabled") = 1, props("AutheEnabled") = 64
+	set props("MatchRoles") = ":%All", props("Description") = "Interop Medic judge page (local demo)"
+	set props("Path") = "/home/irisowner/medic/web", props("ServeFiles") = 1
+	set sc = ..SaveWebApp("/medic", .props)
+	quit:$$$ISERR(sc) sc
+	kill props
+	set props("NameSpace") = "USER", props("Enabled") = 1, props("AutheEnabled") = 64
+	set props("MatchRoles") = ":%All", props("Description") = "Interop Medic REST API (local demo)"
+	set props("DispatchClass") = "Medic.API.Dispatch"
+	quit ..SaveWebApp("/medic/api", .props)
+}
+
+ClassMethod SaveWebApp(pName As %String, ByRef pProps) As %Status [ Private ]
+{
+	quit:##class(Security.Applications).Exists(pName) ##class(Security.Applications).Modify(pName, .pProps)
+	quit ##class(Security.Applications).Create(pName, .pProps)
+}
+
+/// True when the web app exists in USER and serves what it should.
+ClassMethod WebAppOK(pName As %String, pProperty As %String, pValue As %String) As %Boolean
+{
+	new $namespace
+	set $namespace = "%SYS"
+	quit:'##class(Security.Applications).Exists(pName) 0
+	do ##class(Security.Applications).Get(pName, .props)
+	quit (props("NameSpace") = "USER") && (props("Enabled") = 1) && ($get(props(pProperty)) = pValue)
+}
+
 /// Readiness report: docker exec interop-medic iris session IRIS -U USER "##class(Medic.Setup).Doctor()"
 ClassMethod Doctor()
 {
@@ -93,6 +131,8 @@ ClassMethod Doctor()
 	do ..Check("Routing table MedicRouting: "_routes_" receivers", routes > 0)
 	do ..Check("Dataset mounted at /dataset/cases.jsonl", ##class(%File).Exists("/dataset/cases.jsonl"))
 	do ..Check("Demo inbox /data/in", ##class(%File).DirectoryExists("/data/in"))
+	do ..Check("Web app /medic", ..WebAppOK("/medic", "Path", "/home/irisowner/medic/web"))
+	do ..Check("Web app /medic/api", ..WebAppOK("/medic/api", "DispatchClass", "Medic.API.Dispatch"))
 	new $namespace
 	set $namespace = "%SYS"
 	do ..Check("TLS config MedicTLS", ##class(Security.SSLConfigs).Exists("MedicTLS"))

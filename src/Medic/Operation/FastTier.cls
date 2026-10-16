@@ -13,7 +13,7 @@ Property ProviderClass As %String(MAXLEN = 128);
 /// SystemOne base URL, e.g. http://host.docker.internal:8000 for laya-serve. Blank means SYSTEMONE_BASE_URL.
 Property BaseURL As %String(MAXLEN = 512);
 
-/// Optional checkpoint or model id (Laya: english, multilingual, typed-decisions). Blank means SYSTEMONE_MODEL.
+/// Optional checkpoint or model id (Laya: english, multilingual, typed-decisions). Blank means SYSTEMONE_MODEL; "-" sends none.
 Property Model As %String(MAXLEN = 128);
 
 /// Interoperability credentials whose password is the API key. Blank means SYSTEMONE_API_KEY.
@@ -37,13 +37,20 @@ Method OnInit() As %Status
 	if ..Credentials '= "" set key = ##class(Ens.Config.Credentials).GetValue(..Credentials, "Password")
 	set ..Config = {
 		"baseUrl": (..Pick(..BaseURL, "SYSTEMONE_BASE_URL")),
-		"model": (..Pick(..Model, "SYSTEMONE_MODEL")),
+		"model": (..ModelId()),
 		"apiKey": (..Pick(key, "SYSTEMONE_API_KEY")),
 		"timeout": (..TimeoutSeconds),
 		"pricePerMTok": (+..Pick(..PricePerMTokens, "SYSTEMONE_PRICE_PER_MTOK", 0))
 	}
 	$$$LOGINFO("Fast tier provider "_..ProviderClass_$select(..Config.baseUrl '= "": " at "_..Config.baseUrl, 1: ""))
 	quit $$$OK
+}
+
+/// The model id sent to SystemOne. A Model setting of "-" means none (Laya accepts no model), not SYSTEMONE_MODEL.
+Method ModelId() As %String
+{
+	quit:(..Model = "-") ""
+	quit ..Pick(..Model, "SYSTEMONE_MODEL")
 }
 
 ClassMethod Pick(pSetting As %String, pEnvVar As %String, pDefault As %String = "") As %String

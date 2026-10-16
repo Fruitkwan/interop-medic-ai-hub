@@ -150,6 +150,10 @@ To check the plumbing without either model, run `uv run python eval/fake_systemo
 Confidence from different models is not comparable, so re-run the eval after switching. The
 auto-apply threshold is fitted per model.
 
+### Web page and REST API
+
+The image serves a static page at `http://localhost:52773/medic/index.html` (this IRIS build has no default-page setting, so the bare `/medic/` is a 404) and a same-origin REST API at `/medic/api` (health, scenarios, random cases, triage, approve/override, model switch). Both web applications are unauthenticated with role `%All`: this is a local demo, do not expose the container to a network. `LAYA_BASE_URL` (optional) adds a "Laya" choice to the fast-tier model switch. API tests: `uv run python -m unittest tests/test_api.py -v`.
+
 ## Eval
 
 ```bash
