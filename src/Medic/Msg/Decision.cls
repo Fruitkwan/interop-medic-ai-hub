@@ -42,6 +42,12 @@ Method AddStep(pStage As %String, pStatus As %String, pValue As %String, pDetail
 	set ..TraceJSON = steps.%ToJSON()
 }
 
+/// Add the Policy step from AutoApplied. Held is "warn", never "hum": hum means a person already acted.
+Method AddPolicyStep(pThreshold As %Numeric, pDryRun As %Boolean)
+{
+	do ..AddStep("Policy", $select(..AutoApplied: "ok", 1: "warn"), $select(..AutoApplied: "auto-apply", 1: "held for a person"), "threshold "_pThreshold_$select(pDryRun: ", dry run", 1: ""))
+}
+
 /// The trace as a dynamic array (empty when there is none).
 Method Steps() As %DynamicArray
 {

@@ -19,6 +19,19 @@ Method TestAddStepShape()
 	do $$$AssertEquals(steps.%Get(1).ms, 0)
 }
 
+Method TestPolicyStepStatus()
+{
+	set d = ##class(Medic.Msg.Decision).%New()
+	set d.AutoApplied = 1
+	do d.AddPolicyStep(0.9, 0)
+	do $$$AssertEquals(d.Steps().%Get(0).status, "ok")
+	do $$$AssertEquals(d.Steps().%Get(0).value, "auto-apply")
+	set h = ##class(Medic.Msg.Decision).%New()
+	do h.AddPolicyStep(0.9, 1)
+	do $$$AssertEquals(h.Steps().%Get(0).status, "warn", "held is warn, not hum")
+	do $$$AssertEquals(h.Steps().%Get(0).value, "held for a person")
+}
+
 Method TestCopyFromKeepsTrace()
 {
 	set a = ##class(Medic.Msg.Decision).%New()

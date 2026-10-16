@@ -30,7 +30,7 @@ XData BPL [ XMLNamespace = "http://www.intersystems.com/bpl" ]
 <code name='Apply policy' xpos='200' ypos='350' >
 <![CDATA[ do response.CopyFrom(context.Decision)
  set response.AutoApplied = ##class(Medic.Policy.AutoApply).CanAutoApply(response, process.AutoApplyThreshold, process.DryRun)
- do response.AddStep("Policy", $select(response.AutoApplied: "ok", 1: "hum"), $select(response.AutoApplied: "auto-apply", 1: "held for a person"), "threshold "_process.AutoApplyThreshold_$select(process.DryRun: ", dry run", 1: ""))]]>
+ do response.AddPolicyStep(process.AutoApplyThreshold, process.DryRun)]]>
 </code>
 </sequence>
 </process>
