@@ -14,8 +14,8 @@ ClassMethod Approve(pDecisionId As %Integer, pActor As %String = "demo-user") As
 	set action = d.Action
 	do d.AddStep("Person", "hum", "approved "_action, "confirmed by "_pActor)
 	$$$ThrowOnError(d.%Save())
-	do ##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "You", "approved "_action, "confirmed by "_pActor)
-	do ##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "Production", "action executed", ..Simulated(action))
+	$$$ThrowOnError(##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "You", "approved "_action, "confirmed by "_pActor))
+	$$$ThrowOnError(##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "Production", "action executed", ..Simulated(action)))
 	quit ..Finish(d, pActor, "approved "_action)
 }
 
@@ -34,8 +34,8 @@ ClassMethod Override(pDecisionId As %Integer, pAction As %String, pRerouteTarget
 	set d.DecidedBy = "human"
 	do d.AddStep("Person", "hum", "overrode → "_pAction, $select(pReason '= "": pReason, 1: "changed by "_pActor)_" (was "_was_")")
 	$$$ThrowOnError(d.%Save())
-	do ##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "You", "overrode → "_pAction, pReason)
-	do ##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "Eval", "correction recorded", "was "_was_", now "_pAction)
+	$$$ThrowOnError(##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "You", "overrode → "_pAction, pReason))
+	$$$ThrowOnError(##class(Medic.Data.Audit).Log(pDecisionId, d.CaseId, "Eval", "correction recorded", "was "_was_", now "_pAction))
 	quit ..Finish(d, pActor, "overrode → "_pAction_$select(pReason '= "": ": "_pReason, 1: ""))
 }
 

@@ -118,4 +118,17 @@ Method TestSearchFindsApproved()
 	do $$$AssertTrue(hits.%Get(0).similarity > 0.5, "similarity > 0.5")
 }
 
+Method TestAuditFailureFailsTheAction()
+{
+	set bad = ##class(Medic.Data.Audit).Log(1, "x", "a", "e", $justify("", 1001))
+	do $$$AssertTrue($$$ISERR(bad), "Log rejects an over-long detail")
+	set d = ..NewHeld("escalate")
+	try {
+		do ##class(Medic.Actions).Approve(d.%Id(), $justify("", 1001))
+		do $$$AssertFailure("approve should throw when the audit write fails")
+	} catch ex {
+		do $$$AssertTrue(1, "audit failure surfaced")
+	}
+}
+
 }
