@@ -1,0 +1,4 @@
+# Everything runs inside a Linux IRIS container: keep LF on every checkout, including Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

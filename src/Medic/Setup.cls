@@ -86,7 +86,7 @@ ClassMethod Doctor()
 		set url = ##class(Medic.Operation.FastTier).Pick(##class(Ens.Director).GetHostSettingValue("Medic.FastTier", "BaseURL"), "SYSTEMONE_BASE_URL")
 		do ..Check("System One base URL: "_$select(url = "": "(not set)", 1: url), url '= "")
 	}
-	set agent = ##class(Ens.Director).GetHostSettingValue("Medic.Agent", "ProviderClass")
+	set agent = ##class(Medic.Operation.FastTier).Pick(##class(Ens.Director).GetHostSettingValue("Medic.Agent", "ProviderClass"), "MEDIC_AGENT_PROVIDER", "Medic.Provider.AgentMock")
 	do ..Check("Agent provider: "_agent, ##class(%Dictionary.CompiledClass).%ExistsId(agent))
 	set routes = 0, key = ""
 	for { set key = $order(^Ens.LookupTable("MedicRouting", key)) quit:key=""  set routes = routes + 1 }

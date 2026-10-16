@@ -5,8 +5,9 @@ For each errored or suspended message it decides one of **resend**, **fix and re
 **reroute**, **quarantine** or **escalate**, with a confidence, a severity, a rationale and a
 proposed fix.
 
-> Status: skeleton. Runs fully offline with mock providers. The fast tier can already call Jev
-> or Laya; the AI Hub agent (`Medic.Provider.AIHubAgent`) is still a stub.
+> **Status:** this runs fully offline with mock providers. The fast tier can call Jev or Laya. The
+> AI Hub agent (`Medic.AIHub.TriageAgent`) is written, but it hasn't been run yet: it only compiles
+> on the AI Hub Early Access build.
 
 ## How it works
 
@@ -26,7 +27,7 @@ without a person. `DryRun` is on by default.
 | Setting | Item | Default |
 |---|---|---|
 | `ProviderClass` | Medic.FastTier | `MEDIC_FAST_PROVIDER`, else `Medic.Provider.JevMock` |
-| `ProviderClass` | Medic.Agent | `Medic.Provider.AgentMock` |
+| `ProviderClass` | Medic.Agent | `MEDIC_AGENT_PROVIDER`, else `Medic.Provider.AgentMock` |
 | `FastConfidence`, `FastSeverityCeiling` | Medic.Agent | 0.85, 0.6 |
 | `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, on |
 
@@ -80,6 +81,41 @@ IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0 docker compose up -d --build
 
 Without it, the default community image runs everything with the mock providers.
 
+### Agent tier: the AI Hub agent
+
+`Medic.AIHub.TriageAgent` is an AI Hub `%AI.Agent`. Its system prompt sets out the five actions
+and the safety rules, and it must answer with one JSON decision. Its tools, in
+`Medic.AIHub.ToolSet`, are all read-only:
+
+- **`ValidateHL7`:** parses the message and checks its structure.
+- **`GetRoutingRule` and `ClosestRoute`:** look up the routing table, including the closest match
+  for a misspelt receiver.
+- **`CheckEndpoint`:** reads a target's queue depth.
+
+Two policies sit on the agent's tool manager:
+
+- **`Medic.AIHub.ReadOnlyPolicy`** allows only those tools. The agent can read, but it never resends
+  or edits anything. Applying a decision stays with `Medic.Policy.AutoApply` or a person.
+- **`Medic.AIHub.ToolTrace`** records each tool call. The decision's rationale lists the tools that
+  ran, and token use becomes the decision's cost.
+
+`Medic.Provider.AIHubAgent` runs the agent once per message, with the fast tier's verdict as a
+hint, and checks the reply. A reply with no JSON or an unknown action is rejected. A reroute with
+no target becomes an escalation. Without AI Hub, or on any agent error, the case escalates with
+zero confidence rather than failing.
+
+The AI Hub classes are in `src-aihub/` and are compiled only when the image has `%AI.Agent`. The
+default community image skips them, and the mock agent is used.
+
+To use it, set `IRIS_IMAGE` to the build 154 image, then add to `.env`:
+
+```bash
+MEDIC_AGENT_PROVIDER=Medic.Provider.AIHubAgent
+AIHUB_PROVIDER=openai
+AIHUB_MODEL=<model>
+AIHUB_API_KEY=<key>
+```
+
 ### Fast tier: mock, Jev or Laya
 
 Jev (TypeSafe) and Laya (open weights, Apache 2.0) use the same `POST /v1/systemone` API, so one
@@ -99,7 +135,7 @@ Put the settings in `.env` (copied from `.env.example`, git-ignored):
 |---|---|
 | Mock (default, offline) | nothing |
 | Local Laya (`laya-serve`, or `ollaya` on 11435) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=http://host.docker.internal:8000`<br>`SYSTEMONE_PRICE_PER_MTOK=0` |
-| Jev (hosted) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=<TypeSafe API base URL>`<br>`SYSTEMONE_API_KEY=...`<br>`SYSTEMONE_PRICE_PER_MTOK=0.042` |
+| Jev (hosted) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=https://api.typesafe.ai`<br>`SYSTEMONE_API_KEY=...`<br>`SYSTEMONE_MODEL=jev-latest` (required)<br>`SYSTEMONE_PRICE_PER_MTOK=0.042` |
 
 `SYSTEMONE_MODEL` picks a Laya checkpoint (`english`, `multilingual`, `typed-decisions`). The same
 values can be set on `Medic.FastTier` in the Management Portal, with the key stored as
@@ -142,7 +178,7 @@ Tests:
 
 ```bash
 uv run python -m unittest eval/test_score.py dataset/test_generate.py
-docker exec -i interop-medic iris session IRIS -U USER <<< 'do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","")'
+docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","")'
 ```
 
 ## Dataset

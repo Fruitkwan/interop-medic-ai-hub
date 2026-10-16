@@ -28,6 +28,13 @@ services:
       # Password for _SYSTEM, SuperUser and Admin; blank keeps the demo password SYS.
       IRIS_PASSWORD: ${IRIS_PASSWORD:-}
       MEDIC_FAST_PROVIDER: ${MEDIC_FAST_PROVIDER:-}
+      # Agent tier: blank = mock; Medic.Provider.AIHubAgent needs the AI Hub image and an LLM key.
+      MEDIC_AGENT_PROVIDER: ${MEDIC_AGENT_PROVIDER:-}
+      AIHUB_PROVIDER: ${AIHUB_PROVIDER:-}
+      AIHUB_MODEL: ${AIHUB_MODEL:-}
+      AIHUB_API_KEY: ${AIHUB_API_KEY:-}
+      AIHUB_PRICE_IN_PER_MTOK: ${AIHUB_PRICE_IN_PER_MTOK:-}
+      AIHUB_PRICE_OUT_PER_MTOK: ${AIHUB_PRICE_OUT_PER_MTOK:-}
       SYSTEMONE_BASE_URL: ${SYSTEMONE_BASE_URL:-}
       SYSTEMONE_API_KEY: ${SYSTEMONE_API_KEY:-}
       SYSTEMONE_MODEL: ${SYSTEMONE_MODEL:-}

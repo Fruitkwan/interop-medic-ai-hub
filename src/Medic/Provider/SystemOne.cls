@@ -17,9 +17,11 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		if $get(url("port")) '= "" set http.Port = url("port")
 		if $zconvert($get(url("scheme")), "L") = "https" set http.Https = 1, http.SSLConfiguration = "MedicTLS"
 		set http.Timeout = $select(+cfg.timeout > 0: cfg.timeout, 1: 10)
-		set http.ContentType = "application/json"
+		set http.ContentType = "application/json; charset=utf-8"
 		if cfg.apiKey '= "" do http.SetHeader("Authorization", "Bearer "_cfg.apiKey)
-		do http.EntityBody.Write(..BuildRequest(pReq, cfg.model).%ToJSON())
+		// Encode explicitly: otherwise characters such as an accented name go out as Latin-1 and
+		// the server rejects the body.
+		do http.EntityBody.Write($zconvert(..BuildRequest(pReq, cfg.model).%ToJSON(), "O", "UTF8"))
 
 		set path = $get(url("path"))
 		if $extract(path, *) = "/" set path = $extract(path, 1, *-1)

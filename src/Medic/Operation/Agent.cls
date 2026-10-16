@@ -7,7 +7,9 @@ Class Medic.Operation.Agent Extends Ens.BusinessOperation
 
 Parameter INVOCATION = "Queue";
 
-Property ProviderClass As %String(MAXLEN = 128) [ InitialExpression = "Medic.Provider.AgentMock" ];
+/// Blank means MEDIC_AGENT_PROVIDER, else Medic.Provider.AgentMock. The real agent is
+/// Medic.Provider.AIHubAgent (needs the AI Hub build and an LLM key).
+Property ProviderClass As %String(MAXLEN = 128);
 
 Property FastTarget As Ens.DataType.ConfigName [ InitialExpression = "Medic.FastTier" ];
 
@@ -18,6 +20,13 @@ Property FastConfidence As %Numeric [ InitialExpression = 0.85 ];
 Property FastSeverityCeiling As %Numeric [ InitialExpression = 0.6 ];
 
 Parameter SETTINGS = "ProviderClass:Basic,FastTarget:Basic,FastConfidence:Gate,FastSeverityCeiling:Gate";
+
+Method OnInit() As %Status
+{
+	set ..ProviderClass = ##class(Medic.Operation.FastTier).Pick(..ProviderClass, "MEDIC_AGENT_PROVIDER", "Medic.Provider.AgentMock")
+	$$$LOGINFO("Agent provider "_..ProviderClass)
+	quit $$$OK
+}
 
 Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.Msg.Decision) As %Status
 {

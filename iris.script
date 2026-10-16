@@ -3,6 +3,9 @@
  zn "USER"
  set sc = $system.OBJ.LoadDir("/home/irisowner/medic/src", "ck", .errors, 1)
  if 'sc do $system.Status.DisplayError(sc) do $system.Process.Terminate(, 1)
+ set aihub = ##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")
+ write $select(aihub: "AI Hub found: loading src-aihub", 1: "AI Hub not in this image: skipping src-aihub (the agent tier uses the mock)"), !
+ if aihub set sc = $system.OBJ.LoadDir("/home/irisowner/medic/src-aihub", "ck", .errors, 1) if 'sc do $system.Status.DisplayError(sc) do $system.Process.Terminate(, 1)
  set sc = ##class(Medic.Setup).Run()
  if 'sc do $system.Status.DisplayError(sc) do $system.Process.Terminate(, 1)
  do ##class(Ens.Director).SetAutoStart("Medic.Production")
