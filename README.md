@@ -32,18 +32,38 @@ without a person. `DryRun` is on by default.
 
 ## Run it
 
+You need Docker and [uv](https://docs.astral.sh/uv/). The Python scripts use only the standard
+library; `uv sync` creates `.venv` with a matching Python.
+
 ```bash
-python dataset/generate.py --synthea dataset/synthea --cases-dir data/cases
+uv sync
+cp .env.example .env            # optional: your own IRIS password, fast-tier settings
+uv run python dataset/generate.py --synthea dataset/synthea --cases-dir data/cases
 docker compose up -d --build
-python dataset/feed.py --count 20 --rate 1
+uv run python dataset/feed.py --count 20 --rate 1
 ```
 
 `feed.py` drips a shuffled mix of failed messages into the production. Use `--only
 outage_critical_result,patient_mismatch` to show the hard cases.
 
-Open the Management Portal at http://localhost:52773/csp/user/EnsPortal.ProductionConfig.zen
-(`_SYSTEM` / `SYS` on the community image) and look at the Visual Trace for each message.
-If ports 52773 or 1972 are taken, set `MEDIC_WEB_PORT` and `MEDIC_SS_PORT`.
+Open the Management Portal at http://localhost:52773/csp/user/EnsPortal.ProductionConfig.zen and
+look at the Visual Trace for each message. If ports 52773 or 1972 are taken, set `MEDIC_WEB_PORT`
+and `MEDIC_SS_PORT`.
+
+**Signing in.** Use `_SYSTEM` with the `IRIS_PASSWORD` from `.env`, or `SYS` if none is set.
+
+- **No change-password prompt:** `_SYSTEM`, `SuperUser` and `Admin` are never forced to change
+  their password.
+- **When `IRIS_PASSWORD` is applied:** the first time the container starts, and again only after you
+  change it in `.env`. A password changed in the portal survives restarts.
+- **Recreated containers:** recreating the container (`docker compose down`, or a rebuild) starts
+  again from the image.
+
+**Readiness report.** To check the production, providers, routing table, mounts and accounts:
+
+```bash
+docker exec interop-medic iris session IRIS -U USER "##class(Medic.Setup).Doctor()"
+```
 
 ### With AI Hub (Early Access build 154)
 
@@ -73,7 +93,7 @@ typed questions:
 If that wrong-patient probability is 0.7 or higher, the decision is forced to escalate. If the
 server is down or replies badly, the case goes to the agent instead of failing.
 
-Put the settings in a git-ignored `.env` file next to `docker-compose.yml`:
+Put the settings in `.env` (copied from `.env.example`, git-ignored):
 
 | Fast tier | `.env` |
 |---|---|
@@ -88,7 +108,7 @@ Interoperability credentials; portal settings take precedence over env vars.
 Run Laya locally with `pip install "laya[serve]"` then `laya-serve`. See the upstream docs for GPU
 and Docker options.
 
-To check the plumbing without either model, run `python eval/fake_systemone.py` and point
+To check the plumbing without either model, run `uv run python eval/fake_systemone.py` and point
 `SYSTEMONE_BASE_URL` at `http://host.docker.internal:8765`.
 
 Confidence from different models is not comparable, so re-run the eval after switching. The
@@ -97,7 +117,7 @@ auto-apply threshold is fitted per model.
 ## Eval
 
 ```bash
-python eval/run.py
+uv run python eval/run.py
 ```
 
 This sends all 450 cases through the running production twice: once through the full pipeline
@@ -121,7 +141,7 @@ written knowing the labels. Real numbers come from re-running with Jev or Laya a
 Tests:
 
 ```bash
-python -m unittest eval/test_score.py dataset/test_generate.py
+uv run python -m unittest eval/test_score.py dataset/test_generate.py
 docker exec -i interop-medic iris session IRIS -U USER <<< 'do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","")'
 ```
 
@@ -138,13 +158,13 @@ with a known correct action. With `--synthea dataset/synthea`, patients and lab 
   pushing a real result past its critical limit.
 - **The committed sample:** `dataset/synthea` is about 220 KB and keeps only ID, birth date, name and
   sex, plus lab results. To rebuild it from a full Synthea CSV export, run
-  `python dataset/synthea_sample.py --src <export>/csv`.
+  `uv run python dataset/synthea_sample.py --src <export>/csv`.
 - **Without `--synthea`:** the generator uses its own made-up patients. Some cases share an error message but need different actions depending on context. For
 example, a timeout is normally a resend, but a critical potassium result stuck behind a 4-hour
 outage needs a person. Cases are split by hash into `calibration` (60%) and `test` (40%).
 
 ```bash
-python -m unittest dataset/test_generate.py
+uv run python -m unittest dataset/test_generate.py
 ```
 
 All data is synthetic. Don't add real messages.

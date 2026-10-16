@@ -6,8 +6,15 @@ services:
         # Contest target: the AI Hub Early Access build, loaded and retagged locally (see README).
         IMAGE: ${IRIS_IMAGE:-intersystemsdc/iris-community:2026.2-zpm}
     container_name: interop-medic
-    # Run IRIS directly; the image's post-start hook (namespace creation via Python dbapi) is not needed.
-    command: /iris-main --check-caps false --ISCAgent false
+    # Run IRIS directly (the image's own post-start hook is not needed), then apply IRIS_PASSWORD from .env.
+    command:
+      - /iris-main
+      - --check-caps
+      - "false"
+      - --ISCAgent
+      - "false"
+      - -a
+      - iris session IRIS -U USER '##class(Medic.Setup).OnStart()'
     ports:
       # Management Portal: http://localhost:52773/csp/sys/UtilHome.csp (override ports if taken)
       - "${MEDIC_WEB_PORT:-52773}:52773"
@@ -18,6 +25,8 @@ services:
     # Fast tier: the offline mock by default. For Jev or Laya set MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne
     # and SYSTEMONE_BASE_URL (put keys in a git-ignored .env file). See README.
     environment:
+      # Password for _SYSTEM, SuperUser and Admin; blank keeps the demo password SYS.
+      IRIS_PASSWORD: ${IRIS_PASSWORD:-}
       MEDIC_FAST_PROVIDER: ${MEDIC_FAST_PROVIDER:-}
       SYSTEMONE_BASE_URL: ${SYSTEMONE_BASE_URL:-}
       SYSTEMONE_API_KEY: ${SYSTEMONE_API_KEY:-}

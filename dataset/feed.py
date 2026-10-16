@@ -4,9 +4,9 @@ Copies cases from data/cases into data/in (the Medic.DemoFeed folder) at a stead
 shuffled mix of all corruption types. Each file is written under a temporary name and renamed,
 so the file adapter never picks up a half-written file.
 
-    python dataset/feed.py                       # 20 cases, 1 per second
-    python dataset/feed.py --count 100 --rate 5  # faster, for a busy-day demo
-    python dataset/feed.py --only outage_critical_result,patient_mismatch
+    uv run python dataset/feed.py                       # 20 cases, 1 per second
+    uv run python dataset/feed.py --count 100 --rate 5  # faster, for a busy-day demo
+    uv run python dataset/feed.py --only outage_critical_result,patient_mismatch
 """
 
 from __future__ import annotations

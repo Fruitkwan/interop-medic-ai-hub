@@ -7,8 +7,8 @@ messages in this dataset. Patients and lab results come from a built-in list, or
 from a Synthea sample (--synthea) for realistic names, ages and lab values.
 
 Usage:
-    python dataset/generate.py --synthea dataset/synthea --cases-dir data/cases
-    python dataset/generate.py --n-per-type 25 --seed 7   # built-in patients, no files needed
+    uv run python dataset/generate.py --synthea dataset/synthea --cases-dir data/cases
+    uv run python dataset/generate.py --n-per-type 25 --seed 7   # built-in patients, no files needed
 """
 
 from __future__ import annotations

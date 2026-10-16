@@ -2,7 +2,7 @@
 plumbing without Jev credentials or Laya weights. It checks the request shape and answers with
 crude keyword rules - its accuracy means nothing.
 
-    python eval/fake_systemone.py --port 8765 [--key secret]
+    uv run python eval/fake_systemone.py --port 8765 [--key secret]
     MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne SYSTEMONE_BASE_URL=http://host.docker.internal:8765 docker compose up -d
 """
 

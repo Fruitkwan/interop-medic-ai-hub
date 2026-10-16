@@ -1,0 +1,12 @@
+[project]
+name = "interop-medic"
+version = "0.1.0"
+description = "Dataset generator, demo feeder and eval harness for Interop Medic (IRIS AI agent triage)"
+readme = "README.md"
+requires-python = ">=3.11"
+# The scripts use only the standard library; IRIS itself runs in Docker.
+dependencies = []
+
+[tool.uv]
+# Scripts, not an installable package: uv only manages the virtual env.
+package = false

@@ -1,9 +1,9 @@
 """Run the eval end to end: push every dataset case through the running IRIS production, then score.
 
     docker compose up -d
-    python eval/run.py                  # all cases, results in data/results/<provider tag>/
-    python eval/run.py --limit 20       # quick smoke run
-    python eval/run.py --tag laya-local # name the run, e.g. to compare fast-tier providers
+    uv run python eval/run.py                  # all cases, results in data/results/<provider tag>/
+    uv run python eval/run.py --limit 20       # quick smoke run
+    uv run python eval/run.py --tag laya-local # name the run, e.g. to compare fast-tier providers
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ Keeps only what the generator needs: living patients' id, birth date, name and s
 passport, address or other identifiers, even though Synthea's are synthetic), and their numeric
 results for the lab codes the generator knows reference ranges for.
 
-    python dataset/synthea_sample.py --src data/csv --out dataset/synthea --patients 300
+    uv run python dataset/synthea_sample.py --src data/csv --out dataset/synthea --patients 300
 """
 
 from __future__ import annotations
