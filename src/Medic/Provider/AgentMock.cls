@@ -28,6 +28,7 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		} elseif (err [ "no routing rule") || (err [ "no target") {
 			set bad = $piece(pReq.ErrorText, "'", 2)
 			set target = ##class(Medic.Tools).ClosestRoute(bad, ctx."routing_table")
+			do pDecision.AddStep("ClosestRoute", $select(target = "": "warn", 1: "ok"), $select(target = "": "no match", 1: target), "receiver '"_bad_"'")
 			if target = "" {
 				do ..Set(pDecision, "escalate", 0.6, 0.4, "Receiver '"_bad_"' matches no known route")
 			} else {
@@ -51,6 +52,7 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 			do ..Set(pDecision, "escalate", 0.3, 0.5, "No rule applies; needs a person")
 		}
 		set pDecision.CostUSD = ..EstimateCost(pReq)
+		do pDecision.AddStep("Agent", "ok", pDecision.Action_" "_$fnumber(pDecision.Confidence, "", 2), pDecision.Rationale)
 	} catch ex {
 		set sc = ex.AsStatus()
 	}

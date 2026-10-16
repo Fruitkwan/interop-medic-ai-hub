@@ -6,9 +6,11 @@ services:
         # Contest target: the AI Hub Early Access build, loaded and retagged locally (see README).
         IMAGE: ${IRIS_IMAGE:-intersystemsdc/iris-community:2026.2-zpm}
     container_name: interop-medic
-    # Run IRIS directly (the image's own post-start hook is not needed), then apply IRIS_PASSWORD from .env.
+    # Same start-up on every image: the official AI Hub image already uses /iris-main as its
+    # entrypoint, the intersystemsdc image wraps it in a script with a post-start hook we skip.
+    # After IRIS is up, apply IRIS_PASSWORD from .env.
+    entrypoint: ["/tini", "--", "/iris-main"]
     command:
-      - /iris-main
       - --check-caps
       - "false"
       - --ISCAgent

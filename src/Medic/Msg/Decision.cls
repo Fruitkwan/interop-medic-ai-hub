@@ -31,11 +31,28 @@ Property LatencyMs As %Integer;
 /// Estimated from message length and the provider's configured price, not billed usage.
 Property CostUSD As %Numeric(SCALE = 8) [ InitialExpression = 0 ];
 
+/// JSON array of steps {stage, status, value, detail, ms} that led to this decision; status is ok, warn, bad or hum.
+Property TraceJSON As %String(MAXLEN = "");
+
+/// Append one step to the trace.
+Method AddStep(pStage As %String, pStatus As %String, pValue As %String, pDetail As %String = "", pMs As %Integer = 0)
+{
+	set steps = ..Steps()
+	do steps.%Push({"stage": (pStage), "status": (pStatus), "value": (pValue), "detail": (pDetail), "ms": (+pMs)})
+	set ..TraceJSON = steps.%ToJSON()
+}
+
+/// The trace as a dynamic array (empty when there is none).
+Method Steps() As %DynamicArray
+{
+	quit $select(..TraceJSON = "": [], 1: [].%FromJSON(..TraceJSON))
+}
+
 /// Copy every decision field from pOther (used by the BPL to fill its own response object;
 /// replacing that object instead leaves an empty, header-less Decision row behind).
 Method CopyFrom(pOther As Medic.Msg.Decision)
 {
-	for prop = "CaseId", "Action", "Confidence", "Severity", "Rationale", "ProposedFix", "RerouteTarget", "DecidedBy", "Provider", "AutoApplied", "LatencyMs", "CostUSD" {
+	for prop = "CaseId", "Action", "Confidence", "Severity", "Rationale", "ProposedFix", "RerouteTarget", "DecidedBy", "Provider", "AutoApplied", "LatencyMs", "CostUSD", "TraceJSON" {
 		set $property($this, prop) = $property(pOther, prop)
 	}
 }

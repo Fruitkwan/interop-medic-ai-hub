@@ -48,7 +48,8 @@ ClassMethod AsJSON(d As Medic.Msg.Decision) As %DynamicObject
 	quit {
 		"action": (d.Action), "confidence": (+d.Confidence), "severity": (+d.Severity),
 		"decided_by": (d.DecidedBy), "reroute_target": (d.RerouteTarget), "provider": (d.Provider),
-		"auto_applied": (''d.AutoApplied), "latency_ms": (+d.LatencyMs), "cost_usd": (+d.CostUSD)
+		"auto_applied": (''d.AutoApplied), "latency_ms": (+d.LatencyMs), "cost_usd": (+d.CostUSD),
+		"trace": (d.Steps())
 	}
 }
 

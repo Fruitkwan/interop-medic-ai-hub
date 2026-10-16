@@ -35,7 +35,18 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	quit:$$$ISERR(sc) sc
 
 	// A reroute needs a target, which only the agent's routing tools can supply.
-	if (fast.Confidence >= ..FastConfidence) && (fast.Severity < ..FastSeverityCeiling) && (fast.Action '= "reroute") {
+	set conf = $fnumber(fast.Confidence, "", 2), sev = $fnumber(fast.Severity, "", 2)
+	if fast.Action = "reroute" {
+		set reason = "reroute needs a target"
+	} elseif fast.Confidence < ..FastConfidence {
+		set reason = "confidence "_conf_" < "_..FastConfidence
+	} elseif fast.Severity >= ..FastSeverityCeiling {
+		set reason = "severity "_sev_" "_$char(8805)_" "_..FastSeverityCeiling
+	} else {
+		set reason = ""
+	}
+	if reason = "" {
+		do fast.AddStep("Gate", "ok", "trusted", "confidence "_conf_" "_$char(8805)_" "_..FastConfidence_", severity "_sev_" < "_..FastSeverityCeiling)
 		set pResponse = fast
 		quit $$$OK
 	}
@@ -43,6 +54,8 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	set pResponse = ##class(Medic.Msg.Decision).%New()
 	set pResponse.CaseId = pRequest.CaseId
 	set pResponse.DecidedBy = "agent"
+	set pResponse.TraceJSON = fast.TraceJSON
+	do pResponse.AddStep("Gate", "warn", "to agent", reason)
 	set sc = $classmethod(..ProviderClass, "Decide", pRequest, pResponse, fast)
 	set pResponse.CostUSD = pResponse.CostUSD + fast.CostUSD
 	set pResponse.LatencyMs = ($zhorolog - start) * 1000 \ 1

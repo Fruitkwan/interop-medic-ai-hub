@@ -28,13 +28,20 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		// Temperature 0: the same message should get the same decision.
 		set session = agent.CreateSession({"temperature": 0})
 		set response = agent.Chat(session, ..Prompt(pReq, pHint))
+		set it = trace.Calls.%GetIterator()
+		while it.%GetNext(, .call) {
+			do pDecision.AddStep(call.tool, $select(call.ok: "ok", 1: "bad"), call.summary, call.arguments, call.ms)
+		}
 		$$$ThrowOnError(..ParseDecision(response.Content, pDecision))
 		set tools = trace.Summary()
 		set pDecision.Rationale = pDecision.Rationale_$select(tools = "": " [no tools called]", 1: " [tools: "_tools_"]")
 		set pDecision.Provider = $classname()_":"_agent.Model
+		do pDecision.AddStep("Agent", "ok", pDecision.Action_" "_$fnumber(pDecision.Confidence, "", 2), pDecision.Rationale)
 		set pDecision.CostUSD = ..Cost(session.GetStats())
 	} catch ex {
-		do ..Set(pDecision, "escalate", 0, 0.5, "AI Hub agent unavailable: "_$system.Status.GetOneErrorText(ex.AsStatus()))
+		set why = "AI Hub agent unavailable: "_$system.Status.GetOneErrorText(ex.AsStatus())
+		do ..Set(pDecision, "escalate", 0, 0.5, why)
+		do pDecision.AddStep("Agent", "bad", "unavailable", why)
 	}
 	quit $$$OK
 }

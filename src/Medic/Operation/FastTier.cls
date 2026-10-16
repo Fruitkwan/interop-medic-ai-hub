@@ -61,7 +61,17 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	set pResponse.DecidedBy = "fast"
 	set sc = $classmethod(..ProviderClass, "Decide", pRequest, pResponse, "", ..Config)
 	set pResponse.LatencyMs = ($zhorolog - start) * 1000 \ 1
+	if $$$ISOK(sc) {
+		do pResponse.AddStep(..StageName(), "ok", pResponse.Action_" "_$fnumber(pResponse.Confidence, "", 2), pResponse.Rationale, pResponse.LatencyMs)
+	}
 	quit sc
+}
+
+/// Trace stage for this provider: Mock, Jev (hosted typesafe endpoint) or Laya (any other SystemOne endpoint).
+Method StageName() As %String
+{
+	if ..ProviderClass = "Medic.Provider.JevMock" quit "Mock"
+	quit $select(..Config.baseUrl [ "typesafe": "Jev", 1: "Laya")
 }
 
 }
