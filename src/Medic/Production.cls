@@ -15,6 +15,7 @@ XData ProductionDefinition
   <Item Name="Medic.Eval" Category="Eval" ClassName="Medic.Eval.Service" PoolSize="0" Enabled="true">
   </Item>
   <Item Name="Medic.Triage" Category="" ClassName="Medic.Process.Triage" PoolSize="1" Enabled="true">
+    <Setting Target="Host" Name="DryRun">0</Setting>
   </Item>
   <Item Name="Medic.Agent" Category="" ClassName="Medic.Operation.Agent" PoolSize="1" Enabled="true">
   </Item>

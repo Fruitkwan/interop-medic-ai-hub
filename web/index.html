@@ -1,3 +1,79 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Interop Medic</title></head>
-<body><h1>Interop Medic</h1><p>The judge page arrives in a later task. API: <a href="/medic/api/health">/medic/api/health</a></p></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interop Medic</title>
+  <meta name="description" content="Watch an AI Hub agent triage failed HL7 and FHIR messages, check the facts with its tools, and hand risky cases to a person.">
+  <link rel="stylesheet" href="css/hub.css">
+  <script type="module" src="js/hub.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>Interop Medic</h1>
+    <p class="lede">Failed HL7 and FHIR messages, triaged in InterSystems IRIS. A fast model answers first,
+      an AI Hub agent checks the facts with its tools, and a policy decides whether a person has to look.
+      Pick a message, then click any numbered step to see why.</p>
+    <p class="about" id="about"></p>
+    <p class="notice" id="notice" role="status" hidden></p>
+  </header>
+
+  <main class="wrap">
+    <section class="hub" aria-label="Triage">
+      <div class="col-chips">
+        <h2 class="h">Failed messages</h2>
+        <div class="chips" id="chips" role="group" aria-label="Scenarios"></div>
+        <button type="button" class="batch-btn" id="batch-btn">Run a batch of 5</button>
+        <p class="batch-note" id="batch-note" aria-live="polite"></p>
+      </div>
+
+      <svg class="wire" id="wire-in" aria-hidden="true"></svg>
+
+      <div class="device">
+        <div class="scr" aria-live="polite">
+          <div class="scr-top">
+            <span><span aria-hidden="true">● </span><span id="mode"></span><span id="elapsed"></span></span>
+            <span class="badge" id="badge" hidden></span>
+          </div>
+          <div class="steps" id="steps"></div>
+          <div class="drawer" id="drawer" hidden></div>
+        </div>
+        <div class="knobs">
+          <button type="button" class="knob" id="knob-fast"><small>Fast</small> <span class="name">…</span></button>
+          <button type="button" class="knob" id="knob-agent"><small>Agent</small> <span class="name">…</span></button>
+        </div>
+        <p class="knob-note" id="knob-note"></p>
+      </div>
+
+      <svg class="wire" id="wire-out" viewBox="0 0 44 260" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 130 C 26 130,18 70,44 70"/><path d="M0 130 C 26 130,18 200,44 200"/>
+      </svg>
+
+      <div class="out">
+        <div class="card" id="decision-card"></div>
+        <div class="card" id="outcome-card"></div>
+      </div>
+
+      <aside class="audit card" aria-label="Audit trail">
+        <h3><span>Audit trail</span><span class="sub">this message</span></h3>
+        <ol class="events" id="events"></ol>
+        <p class="mem" id="mem" hidden>Saved as a precedent: similar cases will cite this decision.</p>
+      </aside>
+    </section>
+
+    <section class="strip" id="kpis" aria-label="Batch results"></section>
+
+    <section class="batch card" id="batch" hidden>
+      <h2 class="h">Batch runs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Case</th><th>Expected</th><th>Decided</th><th><span class="sr">Correct</span></th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+          <tbody id="batch-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">Synthetic patients only. Every production effect on this page is simulated: nothing downstream receives a message.</footer>
+</body>
+</html>

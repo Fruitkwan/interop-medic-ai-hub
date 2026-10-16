@@ -22,14 +22,16 @@ Every decision goes through `Medic.Agent`. The fast tier is the agent's first st
 When it is confident and the case is low-stakes, the agent stops there; reroutes always go to the
 full agent, because only its tools can name a target. Otherwise the agent runs with the fast
 answer as a hint. `Medic.Policy.AutoApply` then decides whether the decision can be applied
-without a person. `DryRun` is on by default.
+without a person. `DryRun` is on in the class but the demo production turns it off, so the judge page
+can show auto-applied decisions; nothing downstream exists, so every effect is simulated. To turn it
+back on, set the `DryRun` setting of Medic.Triage (Policy group) in the production configuration.
 
 | Setting | Item | Default |
 |---|---|---|
 | `ProviderClass` | Medic.FastTier | `MEDIC_FAST_PROVIDER`, else `Medic.Provider.JevMock` |
 | `ProviderClass` | Medic.Agent | `MEDIC_AGENT_PROVIDER`, else `Medic.Provider.AgentMock` |
 | `FastConfidence`, `FastSeverityCeiling` | Medic.Agent | 0.85, 0.6 |
-| `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, on |
+| `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, off in the demo production (on in the class) |
 
 ## Run it
 

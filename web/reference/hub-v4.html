@@ -1,0 +1,130 @@
+<h2>A, v4: full width, and what a person's action does</h2>
+<p class="subtitle">Pick "Critical result", then press Approve, or Override and choose an action. Watch the trace and the audit trail.</p>
+
+<style>
+  .wrap { font-family:"Inter",system-ui,sans-serif; color:#13241f }
+  .hub { background:#eef3f1; background-image:radial-gradient(#d6e3de 1px,transparent 1px); background-size:18px 18px;
+         border-radius:20px 20px 0 0; padding:24px; display:grid; grid-template-columns:190px 44px minmax(300px,1.2fr) 44px minmax(240px,1fr) minmax(250px,1fr); gap:0 0; align-items:center }
+  .hub h4 { font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:#5b6f68; margin:0 0 8px }
+  .chipx { display:flex; align-items:center; gap:10px; height:38px; padding:0 14px; margin:9px 0; background:#fff; border:1px solid #d5e2dd;
+           border-radius:999px; font-size:14px; font-weight:500; cursor:pointer; white-space:nowrap; transition:all .2s }
+  .chipx .d { width:9px; height:9px; border-radius:50%; background:#2f8a73; flex:none }
+  .chipx.on { background:#1f5f50; color:#fff; border-color:#1f5f50; box-shadow:0 6px 16px rgba(31,95,80,.25) } .chipx.on .d { background:#7ff0c9 }
+  .chipx.add { background:transparent; border-style:dashed; color:#5b6f68 }
+  .wire { width:44px; height:260px } .wire path { stroke:#8cbcae; stroke-width:1.6; fill:none }
+  .wire path.live { stroke:#1f5f50; stroke-width:2.4; stroke-dasharray:6 6; animation:flow 1s linear infinite }
+  @keyframes flow { to { stroke-dashoffset:-12 } }
+  .device { background:linear-gradient(#fbfcfb,#eef2f0); border:1px solid #d5e0db; border-radius:34px; padding:16px 16px 14px; box-shadow:0 18px 40px rgba(20,50,40,.12) }
+  .scr { background:#10251f; border-radius:18px; padding:14px 16px 10px; color:#d9efe7; min-height:230px }
+  .scr .t { font-size:12px; color:#7fd8b9; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px }
+  .badge { background:#7c3aed; color:#fff; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap }
+  .step { display:flex; align-items:center; gap:10px; font-size:13px; padding:5px 6px; border-radius:8px; cursor:pointer; animation:fade .35s ease }
+  @keyframes fade { from { opacity:0; transform:translateY(4px) } }
+  .step:hover { background:#1a3a31 }
+  .step .s { width:18px; height:18px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:10px; font-weight:700 }
+  .ok{background:#2f8a73;color:#fff}.warn{background:#f5a524;color:#2a1a00}.bad{background:#ef5350;color:#fff}.hum{background:#60a5fa;color:#0b1b30}
+  .step .v { margin-left:auto; color:#9fb9b0 }
+  .drawer { margin-top:6px; background:#0b1b16; border-left:3px solid #7fd8b9; border-radius:6px; padding:7px 10px; font-family:ui-monospace,monospace; font-size:11px; color:#b9d8cd; display:none }
+  .knobs { display:flex; justify-content:center; gap:14px; margin-top:12px }
+  .knob { min-width:104px; height:34px; border-radius:17px; background:#fff; border:1px solid #d3ddd9; display:flex; align-items:center; justify-content:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer }
+  .knob small { color:#7a8c86; font-weight:500 }
+  .out { display:flex; flex-direction:column; gap:12px; padding-right:14px }
+  .oc { background:#fff; border:1px solid #d5e2dd; border-radius:16px; padding:13px 15px; box-shadow:0 4px 12px rgba(20,50,40,.06) }
+  .oc h5 { margin:0 0 8px; font-size:13px; color:#5b6f68; font-weight:600 }
+  .pillx { display:inline-block; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700 }
+  .p-esc{background:#fde2e1;color:#b42318}.p-res{background:#dcf3e6;color:#1e6b3a}.p-rer{background:#e0ecff;color:#1d4ed8}.p-q{background:#efe7d6;color:#7a5b16}
+  .row { display:flex; justify-content:space-between; font-size:12px; color:#5b6f68; margin-top:8px }
+  .barx { height:7px; border-radius:4px; background:#edf1ef; margin-top:3px } .barx i { display:block; height:100%; border-radius:4px; transition:width .4s }
+  .act { display:flex; gap:8px; margin-top:10px } .act button, .ovr button { flex:1; height:30px; border-radius:9px; border:1px solid #d5e2dd; background:#fff; font-weight:600; font-size:12px; cursor:pointer }
+  .act .pri { background:#1f5f50; color:#fff; border-color:#1f5f50 }
+  .ovr { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px } .ovr button { flex:0 0 calc(50% - 3px) }
+  .msg { font-size:13px; line-height:1.45 } .msg b { color:#b42318 } .good { color:#1e6b3a; font-weight:600 }
+  .audit { background:#fff; border:1px solid #d5e2dd; border-radius:16px; padding:13px 15px; height:100%; box-sizing:border-box }
+  .audit h5 { margin:0 0 10px; font-size:13px; color:#5b6f68; font-weight:600; display:flex; justify-content:space-between }
+  .ev { display:grid; grid-template-columns:44px 1fr; gap:8px; font-size:12px; padding:7px 0; border-top:1px solid #f0f3f2; animation:fade .35s ease }
+  .ev .tm { color:#8a9b95; font-variant-numeric:tabular-nums } .ev .who { font-weight:600 }
+  .mem { margin-top:8px; font-size:12px; background:#f3f0ff; color:#5b21b6; border-radius:8px; padding:7px 9px; display:none }
+  .strip { display:grid; grid-template-columns:repeat(4,1fr); background:#13241f; color:#e6f2ee; border-radius:0 0 20px 20px; padding:14px 24px }
+  .kpi .n { font-size:22px; font-weight:700 } .kpi .l { font-size:11px; color:#9fb9b0; text-transform:uppercase; letter-spacing:.05em }
+</style>
+
+<div class="wrap">
+<div class="hub">
+  <div>
+    <h4>Failed messages</h4>
+    <div class="chipx" onclick="pick(0,this)"><span class="d"></span>Endpoint timeout</div>
+    <div class="chipx on" onclick="pick(1,this)"><span class="d"></span>Critical result</div>
+    <div class="chipx" onclick="pick(2,this)"><span class="d"></span>Misspelt receiver</div>
+    <div class="chipx" onclick="pick(3,this)"><span class="d"></span>Wrong patient</div>
+    <div class="chipx add">+ Build your own</div>
+  </div>
+  <svg class="wire" viewBox="0 0 44 260"><path id="w0" d="M0 50 C 26 50,18 130,44 130"/><path id="w1" d="M0 100 C 26 100,18 130,44 130"/><path id="w2" d="M0 150 C 26 150,18 130,44 130"/><path id="w3" d="M0 200 C 26 200,18 130,44 130"/></svg>
+  <div class="device">
+    <div class="scr">
+      <div class="t"><span>● Replay of a real run · <span id="tm"></span></span><span class="badge" id="badge">Agent overruled Jev</span></div>
+      <div id="steps"></div>
+      <div class="drawer" id="drawer"></div>
+    </div>
+    <div class="knobs">
+      <div class="knob" onclick="cycle(0)"><small>Fast</small> <span id="k0">Jev</span></div>
+      <div class="knob" onclick="cycle(1)"><small>Agent</small> <span id="k1">Gemini</span></div>
+    </div>
+  </div>
+  <svg class="wire" viewBox="0 0 44 260"><path class="live" d="M0 130 C 26 130,18 70,44 70"/><path class="live" d="M0 130 C 26 130,18 200,44 200"/></svg>
+  <div class="out">
+    <div class="oc"><h5>Decision</h5><span id="pill" class="pillx"></span>
+      <div class="row"><span>Severity</span><span id="sv"></span></div><div class="barx"><i id="svb"></i></div>
+      <div class="row"><span>Confidence</span><span id="cf"></span></div><div class="barx"><i id="cfb" style="background:#2f8a73"></i></div>
+    </div>
+    <div class="oc" id="who"></div>
+  </div>
+  <div class="audit">
+    <h5><span>Audit trail</span><span style="font-weight:500;color:#8a9b95">this message</span></h5>
+    <div id="events"></div>
+    <div class="mem" id="mem">Saved as a precedent: similar cases will cite this decision.</div>
+  </div>
+</div>
+<div class="strip">
+  <div class="kpi"><div class="n">89.8%</div><div class="l">Correct (450 cases)</div></div>
+  <div class="kpi"><div class="n">61%</div><div class="l">Safely automated, ≤5% error</div></div>
+  <div class="kpi"><div class="n">$0.0004</div><div class="l">Cost per decision</div></div>
+  <div class="kpi"><div class="n">0.5 s</div><div class="l">Median, fast path</div></div>
+</div>
+</div>
+
+<script>
+const S=[
+ {tm:"0.5 s",ov:false,steps:[["ok","Jev","resend 0.96","Endpoint down 12 min · message valid"],["ok","Gate","trusted","0.96 ≥ 0.85, low severity"],["ok","Policy","auto-apply","resend needs no person"]],pill:["RESEND","p-res"],sv:.3,cf:.96,auto:true,nx:"Resent automatically",ev:[["Jev","resend, 0.96"],["Policy","auto-applied"],["Production","message resent"]]},
+ {tm:"18.6 s",ov:true,steps:[["warn","Jev","resend 0.42","Jev sees a timeout, suggests resend"],["warn","Gate","to agent","0.42 < 0.85"],["ok","ValidateHL7","valid","ORU^R01 parses cleanly"],["bad","CheckEndpoint","down 9 h","Medic.To.EPR down 546 min"],["bad","Agent","escalate","OBX-8 = LL · Hb 6.2 g/dL undelivered"]],pill:["ESCALATE","p-esc"],sv:.95,cf:.95,auto:false,nx:"Phone the ward: Hb 6.2",ev:[["Jev","resend, 0.42"],["Agent","escalate, 0.95"],["Policy","held for a person"]]},
+ {tm:"9.2 s",ov:false,steps:[["warn","Jev","reroute 0.68","routing problem, no target"],["warn","Gate","needs target","only the agent can name one"],["ok","ClosestRoute","EPRR → EPR","EPRR is a variant of EPR"],["ok","Agent","reroute","to Medic.To.EPR"]],pill:["REROUTE","p-rer"],sv:.4,cf:.9,auto:true,nx:"Rerouted to Medic.To.EPR",ev:[["Jev","reroute, 0.68"],["Agent","reroute → EPR"],["Production","message rerouted"]]},
+ {tm:"1.1 s",ov:false,steps:[["bad","Jev","escalate 0.99","name ≠ name on file for this MRN"],["bad","Identity","risk 0.82","possible wrong-patient result"],["bad","Policy","person only","identity is never automated"]],pill:["ESCALATE","p-esc"],sv:.9,cf:.99,auto:false,nx:"Check patient identity",ev:[["Jev","escalate, 0.99"],["Policy","held for a person"]]}];
+const K=[["Jev","Laya","Mock"],["Gemini","Mock"]],kv=[0,0];let cur=1,clock=0;
+const t=()=>{clock+=1;return "09:"+String(40+clock).padStart(2,"0")};
+function steps(s){document.getElementById('steps').innerHTML=s.steps.map((x,k)=>`<div class="step" onclick="det(${k})"><span class="s ${x[0]}">${k+1}</span>${x[1]}<span class="v">${x[2]}</span></div>`).join('');}
+function addEv(who,what){document.getElementById('events').insertAdjacentHTML('beforeend',`<div class="ev"><span class="tm">${t()}</span><span><span class="who">${who}</span> · ${what}</span></div>`);}
+function render(i){cur=i;clock=0;const s=JSON.parse(JSON.stringify(S[i]));S[i]._live=s;
+ document.getElementById('tm').textContent=s.tm; steps(s);
+ document.getElementById('drawer').style.display='none'; document.getElementById('mem').style.display='none';
+ document.getElementById('badge').style.display=s.ov?'inline-block':'none';
+ setPill(s.pill); document.getElementById('sv').textContent=s.sv.toFixed(2); document.getElementById('cf').textContent=s.cf.toFixed(2);
+ const sb=document.getElementById('svb');sb.style.width=s.sv*100+'%';sb.style.background=s.sv>.6?'#ef5350':s.sv>.35?'#f5a524':'#2f8a73';
+ document.getElementById('cfb').style.width=s.cf*100+'%';
+ document.getElementById('who').innerHTML=s.auto?`<h5>Outcome</h5><div class="msg good">✓ ${s.nx}</div>`:
+   `<h5>Awaiting a person</h5><div class="msg"><b>●</b> ${s.nx}</div><div class="act"><button class="pri" onclick="approve()">Approve</button><button onclick="override()">Override</button></div>`;
+ document.getElementById('events').innerHTML=''; s.ev.forEach(e=>addEv(e[0],e[1]));
+ for(let k=0;k<4;k++)document.getElementById('w'+k).setAttribute('class',k===i?'live':'');}
+function setPill(p){const el=document.getElementById('pill');el.textContent=p[0];el.className='pillx '+p[1];}
+function approve(){const s=S[cur]._live; s.steps.push(["hum","You","approved","Approved by demo-user · applied by the production"]); steps(s);
+ document.getElementById('who').innerHTML=`<h5>Done</h5><div class="msg good">✓ Ward paged · message held until EPR is back</div>`;
+ addEv("You","approved escalation"); addEv("Production","on-call ward paged (simulated)"); document.getElementById('mem').style.display='block';}
+function override(){document.getElementById('who').innerHTML=`<h5>Override: what should happen?</h5><div class="ovr">
+ <button onclick="ovr('resend','p-res')">Resend</button><button onclick="ovr('reroute','p-rer')">Reroute</button>
+ <button onclick="ovr('quarantine','p-q')">Quarantine</button><button onclick="ovr('fix_and_resend','p-res')">Fix &amp; resend</button></div>`;}
+function ovr(a,c){const s=S[cur]._live; s.steps.push(["hum","You","→ "+a,"Overridden by demo-user · counted as an agent error in the eval"]); steps(s); setPill([a.toUpperCase().replace(/_/g,' '),c]);
+ document.getElementById('who').innerHTML=`<h5>Done</h5><div class="msg good">✓ ${a.replace(/_/g,' ')} applied</div><div class="msg" style="margin-top:6px;color:#5b6f68">Recorded as a correction</div>`;
+ addEv("You","overrode → "+a); addEv("Eval","correction logged, thresholds re-fit");}
+function det(k){const d=document.getElementById('drawer');d.textContent=S[cur]._live.steps[k][3];d.style.display='block';}
+function pick(i,el){document.querySelectorAll('.chipx').forEach(c=>c.classList.remove('on'));el.classList.add('on');render(i);}
+function cycle(n){kv[n]=(kv[n]+1)%K[n].length;document.getElementById('k'+n).textContent=K[n][kv[n]];}
+render(1);
+</script>
