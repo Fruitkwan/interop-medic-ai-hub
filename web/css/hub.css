@@ -196,19 +196,24 @@ td.no { color: #b42318; font-weight: 700; }
 .foot { max-width: 1320px; margin: 0 auto; padding: 0 24px 32px; font-size: 12px; color: var(--faint); }
 
 /* ---------- Narrower screens ---------- */
+/* 900-1180 px: chips | device | cards, with the audit trail as a full-width row below. */
 @media (max-width: 1180px) {
-  .hub { grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .hub { grid-template-columns: minmax(170px, 200px) minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   .wire { display: none; }
   .out { padding-right: 0; }
+  .audit { grid-column: 1 / -1; }
+}
+/* Below 900 px: one column. */
+@media (max-width: 899px) {
+  .hub { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 14px; }
+  .chips { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .chip { margin: 0; }
 }
 @media (max-width: 760px) {
   .top { padding: 20px 16px 10px; }
   .top h1 { font-size: 22px; }
   .wrap { padding: 0 16px 16px; }
   .foot { padding: 0 16px 24px; }
-  .hub { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 14px; }
-  .chips { flex-direction: row; flex-wrap: wrap; gap: 8px; }
-  .chip { margin: 0; }
   .device { border-radius: 26px; padding: 12px; }
   .strip { grid-template-columns: repeat(2, 1fr); padding: 14px 16px; }
   table { font-size: 12px; }

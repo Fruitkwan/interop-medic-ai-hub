@@ -88,9 +88,35 @@ function h(tag, attrs = {}, ...children) {
   return el;
 }
 
+/* Keyboard focus survives re-renders: rebuilt buttons carry a stable data-key. The focused key is
+   remembered before a zone is rebuilt (or a button disabled) and focus goes back to the button
+   with that key once it exists and is enabled again. */
+let pendingFocus = null;
+
+function rememberFocus(scope) {
+  const a = document.activeElement;
+  if (a && a !== document.body && scope.contains(a) && a.dataset.key) pendingFocus = a.dataset.key;
+}
+
+/** Focus the remembered button; if it is gone, focus the first enabled button in `scope` (or scope). */
+function restoreFocus(scope) {
+  if (!pendingFocus) return;
+  const target = document.querySelector(`[data-key="${CSS.escape(pendingFocus)}"]`);
+  if (target && !target.disabled) {
+    if (document.activeElement !== target) target.focus();
+    pendingFocus = null;
+  } else if (!target && scope && scope !== document.body && !scope.contains(document.activeElement)) {
+    const next = [...scope.querySelectorAll('button')].find((b) => !b.disabled);
+    (next ?? scope).focus();
+    pendingFocus = null;
+  }
+}
+
 /** Replace an element's children, skipping null/undefined/false (replaceChildren would print "null"). */
 function fill(el, ...children) {
+  rememberFocus(el);
   el.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+  restoreFocus(el);
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -137,12 +163,13 @@ function renderChips() {
       class: `chip${state.activeChip === s.id ? ' on' : ''}`,
       type: 'button',
       'data-id': s.id,
+      'data-key': `chip-${s.id}`,
       'aria-pressed': String(state.activeChip === s.id),
       disabled: state.busy,
       onclick: () => runScenario(s),
     }, h('span', { class: 'dot', 'aria-hidden': 'true' }), s.label)),
     rest.length ? h('button', {
-      class: 'chip more', type: 'button', 'aria-expanded': String(state.showAll),
+      class: 'chip more', type: 'button', 'data-key': 'chip-more', 'aria-expanded': String(state.showAll),
       onclick: () => { state.showAll = !state.showAll; renderChips(); },
     }, state.showAll ? 'Fewer' : `More (${rest.length})`) : null,
   );
@@ -195,6 +222,7 @@ function renderScreen() {
     fill(steps, ...stepRows(d.trace).map((r) => h('button', {
       class: `step${state.openStep === r.n ? ' open' : ''}`,
       type: 'button',
+      'data-key': `step-${r.n}`,
       'aria-expanded': String(state.openStep === r.n),
       'aria-label': `Step ${r.n}, ${r.stage}: ${r.value} (${STATUS_WORD[r.status] ?? r.status}). Show details`,
       onclick: () => { state.openStep = state.openStep === r.n ? null : r.n; renderScreen(); },
@@ -303,26 +331,26 @@ function renderOutcome() {
   if (state.outcomeView === 'override') {
     fill(card, h('h3', {}, 'Override: what should happen?'),
       h('div', { class: 'ovr' }, ...ACTIONS.filter((a) => a !== d.action).map((a) => h('button', {
-        type: 'button', disabled: busy,
+        type: 'button', disabled: busy, 'data-key': `ovr-${a}`,
         onclick: () => (a === 'reroute' ? setOutcomeView('reroute') : doOverride(a, '')),
       }, actionLabel(a)))),
-      h('button', { type: 'button', class: 'link', disabled: busy, onclick: () => setOutcomeView('default') }, 'Cancel'), err);
+      h('button', { type: 'button', class: 'link', disabled: busy, 'data-key': 'ovr-cancel', onclick: () => setOutcomeView('default') }, 'Cancel'), err);
     return;
   }
   if (state.outcomeView === 'reroute') {
     const targets = [...new Set(Object.values(state.current.caseObj?.context?.routing_table ?? {}))];
     fill(card, h('h3', {}, 'Reroute to which route?'),
       targets.length
-        ? h('div', { class: 'ovr' }, ...targets.map((t) => h('button', { type: 'button', disabled: busy, onclick: () => doOverride('reroute', t) }, t)))
+        ? h('div', { class: 'ovr' }, ...targets.map((t) => h('button', { type: 'button', disabled: busy, 'data-key': `to-${t}`, onclick: () => doOverride('reroute', t) }, t)))
         : h('p', { class: 'msg sub' }, 'This message has no routing table, so there is nothing to reroute to.'),
-      h('button', { type: 'button', class: 'link', disabled: busy, onclick: () => setOutcomeView('override') }, 'Back'), err);
+      h('button', { type: 'button', class: 'link', disabled: busy, 'data-key': 'to-back', onclick: () => setOutcomeView('override') }, 'Back'), err);
     return;
   }
   fill(card, h('h3', {}, 'Awaiting a person'),
     h('p', { class: 'msg' }, h('b', { class: 'alert', 'aria-hidden': 'true' }, '● '), fix || 'The policy held this decision for a person.'),
     h('div', { class: 'act' },
-      h('button', { type: 'button', class: 'pri', disabled: busy, onclick: doApprove }, 'Approve'),
-      h('button', { type: 'button', disabled: busy, onclick: () => setOutcomeView('override') }, 'Override')),
+      h('button', { type: 'button', class: 'pri', disabled: busy, 'data-key': 'act-approve', onclick: doApprove }, 'Approve'),
+      h('button', { type: 'button', disabled: busy, 'data-key': 'act-override', onclick: () => setOutcomeView('override') }, 'Override')),
     err);
 }
 
@@ -416,9 +444,15 @@ function renderAll() {
 }
 
 function setBusy(busy) {
+  // Disabling the focused chip, knob or batch button drops its focus: keep its key pending until
+  // the button is enabled again. Set after the renders, which may already have cleared it.
+  const a = document.activeElement;
+  const key = a && a !== document.body ? a.dataset.key : undefined;
   state.busy = busy;
   renderChips();
   renderKnobs();
+  if (key) pendingFocus = key;
+  restoreFocus(document.body);
 }
 
 /** Triage one case, showing the thinking row until the answer arrives. Returns the decision or null. */
@@ -517,6 +551,9 @@ async function boot() {
   $('knob-fast').addEventListener('click', () => cycleModel('fast'));
   $('knob-agent').addEventListener('click', () => cycleModel('agent'));
   window.addEventListener('resize', () => requestAnimationFrame(drawWires));
+  // A pending focus restore is dropped as soon as the person moves focus or clicks elsewhere.
+  document.addEventListener('pointerdown', () => { pendingFocus = null; });
+  document.addEventListener('focusin', (e) => { if (e.target.dataset?.key !== pendingFocus) pendingFocus = null; });
   renderAll();
   renderKpis();
   const hero = state.scenarios.find((s) => s.id === HERO);

@@ -23,7 +23,7 @@
       <div class="col-chips">
         <h2 class="h">Failed messages</h2>
         <div class="chips" id="chips" role="group" aria-label="Scenarios"></div>
-        <button type="button" class="batch-btn" id="batch-btn">Run a batch of 5</button>
+        <button type="button" class="batch-btn" id="batch-btn" data-key="batch">Run a batch of 5</button>
         <p class="batch-note" id="batch-note" aria-live="polite"></p>
       </div>
 
@@ -39,8 +39,8 @@
           <div class="drawer" id="drawer" hidden></div>
         </div>
         <div class="knobs">
-          <button type="button" class="knob" id="knob-fast"><small>Fast</small> <span class="name">…</span></button>
-          <button type="button" class="knob" id="knob-agent"><small>Agent</small> <span class="name">…</span></button>
+          <button type="button" class="knob" id="knob-fast" data-key="knob-fast"><small>Fast</small> <span class="name">…</span></button>
+          <button type="button" class="knob" id="knob-agent" data-key="knob-agent"><small>Agent</small> <span class="name">…</span></button>
         </div>
         <p class="knob-note" id="knob-note"></p>
       </div>
@@ -51,7 +51,7 @@
 
       <div class="out">
         <div class="card" id="decision-card"></div>
-        <div class="card" id="outcome-card"></div>
+        <div class="card" id="outcome-card" tabindex="-1"></div>
       </div>
 
       <aside class="audit card" aria-label="Audit trail">
