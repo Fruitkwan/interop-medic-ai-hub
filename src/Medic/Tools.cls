@@ -44,6 +44,13 @@ ClassMethod ClosestRoute(pReceiver As %String, pTable As %DynamicObject = "") As
 	quit best
 }
 
+/// Past person-approved decisions whose failure text resembles pErrorText: a JSON array of up to 3
+/// {caseId, action, rerouteTarget, decidedBy, similarity, summary}, most similar first.
+ClassMethod SearchPrecedents(pErrorText As %String) As %String
+{
+	quit ##class(Medic.Data.Precedent).Search(pErrorText, 3).%ToJSON()
+}
+
 ClassMethod RoutingTable() As %DynamicObject
 {
 	set tbl = {}, key = ""

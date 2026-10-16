@@ -25,6 +25,14 @@ Method ClosestRoute(receiver As %String) As %String [ WebMethod ]
 	quit ##class(Medic.Tools).ClosestRoute(receiver)
 }
 
+/// Past decisions a person approved or overrode for failures like this one. Pass the failed
+/// message's error text. Returns a JSON array (most similar first) of caseId, action, rerouteTarget,
+/// decidedBy, similarity (0 to 1) and summary; empty when nothing similar was decided before.
+Method SearchPrecedents(errorText As %String) As %String [ WebMethod ]
+{
+	quit ##class(Medic.Tools).SearchPrecedents(errorText)
+}
+
 /// Queue depth of a production item, e.g. Medic.To.EPR. Returns JSON with name and queueDepth.
 Method CheckEndpoint(configName As %String) As %String [ WebMethod ]
 {

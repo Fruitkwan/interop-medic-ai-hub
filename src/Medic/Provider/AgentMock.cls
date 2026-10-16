@@ -13,6 +13,10 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		set ctx = $select(pReq.ContextJSON = "": {}, 1: {}.%FromJSON(pReq.ContextJSON))
 		set err = $zconvert(pReq.ErrorText, "L")
 		set raw = ..Raw(pReq)
+		set prec = ##class(Medic.Data.Precedent).Search(pReq.ErrorText, 3)
+		set top = $select(prec.%Size(): prec.%Get(0), 1: "")
+		set usePrec = ($isobject(top) && (top.similarity >= 0.8))
+		if usePrec do pDecision.AddStep("SearchPrecedents", "ok", "precedent "_top.caseId, top.action_" (similarity "_$fnumber(top.similarity, "", 2)_")")
 		set critical = (raw [ "|HH|") || (raw [ "|LL|")
 		set downMin = $select($isobject(ctx.endpoint): +ctx.endpoint."down_minutes", 1: 0)
 
@@ -51,6 +55,7 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		} else {
 			do ..Set(pDecision, "escalate", 0.3, 0.5, "No rule applies; needs a person")
 		}
+		if usePrec set pDecision.Rationale = pDecision.Rationale_" Precedent "_top.caseId_": "_top.action_"."
 		set pDecision.CostUSD = ..EstimateCost(pReq)
 		do pDecision.AddStep("Agent", "ok", pDecision.Action_" "_$fnumber(pDecision.Confidence, "", 2), pDecision.Rationale)
 	} catch ex {

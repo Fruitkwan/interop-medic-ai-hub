@@ -118,6 +118,29 @@ Method TestSearchFindsApproved()
 	do $$$AssertTrue(hits.%Get(0).similarity > 0.5, "similarity > 0.5")
 }
 
+Method TestMockUsesPrecedent()
+{
+	set d = ..NewHeld("escalate", "No routing rule matched MSH:5 'LABB'")
+	do ##class(Medic.Actions).Approve(d.%Id())
+	set req = ##class(Medic.Msg.FailedMessage).%New()
+	set req.CaseId = "UT-mock", req.Format = "hl7v2"
+	set req.ErrorText = "No routing rule matched MSH:5 'LABB'"
+	do req.RawMessage.Write("MSH|^~\&|LIS|MEDIC_HOSP|LABB|MEDIC_HOSP|20261001120000||ORU^R01^ORU_R01|MSG1|P|2.5"_$char(13))
+	set req.ContextJSON = {"routing_table": {"LAB": "Medic.To.LIS"}}.%ToJSON()
+	set dec = ##class(Medic.Msg.Decision).%New()
+	do $$$AssertStatusOK(##class(Medic.Provider.AgentMock).Decide(req, dec))
+	// remove it now so it cannot outrank the precedent TestSearchFindsApproved expects
+	set case = d.CaseId
+	&sql(DELETE FROM Medic_Data.Precedent WHERE CaseId = :case)
+	set found = 0, steps = dec.Steps()
+	for i = 0:1:steps.%Size() - 1 {
+		if steps.%Get(i).stage = "SearchPrecedents" { set found = 1, val = steps.%Get(i).value }
+	}
+	do $$$AssertTrue(found, "SearchPrecedents step present")
+	do $$$AssertEquals($get(val), "precedent "_d.CaseId, "step names the precedent case")
+	do $$$AssertTrue(dec.Rationale [ "Precedent", "rationale cites the precedent")
+}
+
 Method TestAuditFailureFailsTheAction()
 {
 	set bad = ##class(Medic.Data.Audit).Log(1, "x", "a", "e", $justify("", 1001))

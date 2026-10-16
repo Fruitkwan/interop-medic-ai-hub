@@ -4,7 +4,7 @@
 Class Medic.AIHub.ReadOnlyPolicy Extends %AI.Policy.Authorization
 {
 
-Parameter ALLOWED = ",ValidateHL7,GetRoutingRule,ClosestRoute,CheckEndpoint,";
+Parameter ALLOWED = ",ValidateHL7,GetRoutingRule,ClosestRoute,CheckEndpoint,SearchPrecedents,";
 
 /// toolref identifies the registration (e.g. "iris:Medic.AIHub.ToolSet"), not the tool;
 /// the tool being called is call.name.
