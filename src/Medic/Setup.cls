@@ -78,15 +78,16 @@ ClassMethod CreateTLSConfig() As %Status
 }
 
 /// Web apps for the judge page, created or updated in place so a rebuild or rerun is safe.
-/// Unauthenticated with role %All: a local demo, not for exposed hosts.
-/// /medic serves static files from the image; /medic/api dispatches to Medic.API.Dispatch.
+/// Unauthenticated: a local demo, not for exposed hosts. /medic serves static files only (no role,
+/// no ZEN); /medic/api runs as %All but its dispatch class serves only its UrlMap.
 ClassMethod CreateWebApps() As %Status
 {
 	new $namespace
 	set $namespace = "%SYS"
 	kill props
 	set props("NameSpace") = "USER", props("Enabled") = 1, props("AutheEnabled") = 64
-	set props("MatchRoles") = ":%All", props("Description") = "Interop Medic judge page (local demo)"
+	// Static files need no role and no ZEN/CSP page execution (otherwise /medic/EnsPortal.*.zen would run as %All).
+	set props("MatchRoles") = "", props("CSPZENEnabled") = 0, props("Description") = "Interop Medic judge page (local demo)"
 	set props("Path") = "/home/irisowner/medic/web", props("ServeFiles") = 1
 	set sc = ..SaveWebApp("/medic", .props)
 	quit:$$$ISERR(sc) sc
@@ -113,6 +114,16 @@ ClassMethod WebAppOK(pName As %String, pProperty As %String, pValue As %String) 
 	quit (props("NameSpace") = "USER") && (props("Enabled") = 1) && ($get(props(pProperty)) = pValue)
 }
 
+/// True when /medic runs no ZEN/CSP pages and grants no role (static files only).
+ClassMethod StaticAppSafe() As %Boolean
+{
+	new $namespace
+	set $namespace = "%SYS"
+	quit:'##class(Security.Applications).Exists("/medic") 0
+	do ##class(Security.Applications).Get("/medic", .props)
+	quit ($get(props("CSPZENEnabled")) = 0) && ($get(props("MatchRoles")) = "")
+}
+
 /// Readiness report: docker exec interop-medic iris session IRIS -U USER "##class(Medic.Setup).Doctor()"
 ClassMethod Doctor()
 {
@@ -132,6 +143,7 @@ ClassMethod Doctor()
 	do ..Check("Dataset mounted at /dataset/cases.jsonl", ##class(%File).Exists("/dataset/cases.jsonl"))
 	do ..Check("Demo inbox /data/in", ##class(%File).DirectoryExists("/data/in"))
 	do ..Check("Web app /medic", ..WebAppOK("/medic", "Path", "/home/irisowner/medic/web"))
+	do ..Check("Web app /medic serves static files only (no ZEN, no role)", ..StaticAppSafe())
 	do ..Check("Web app /medic/api", ..WebAppOK("/medic/api", "DispatchClass", "Medic.API.Dispatch"))
 	new $namespace
 	set $namespace = "%SYS"
