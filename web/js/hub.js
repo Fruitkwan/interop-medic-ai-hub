@@ -3,6 +3,7 @@
 // recorded replay plus the browser mock models). The exported helpers are pure and unit-tested.
 import { detectSource } from './source.js';
 import { SAMPLE_SCENARIOS } from './samples.js';
+import { buildCase, validateCase, messageToText } from './builder.js';
 
 /* ---------- Pure helpers (tested in web/tests/hub.test.mjs) ---------- */
 
@@ -57,6 +58,7 @@ export function kpis(rows) {
 
 const FEATURED = ['endpoint_timeout', 'outage_critical_result', 'unknown_receiver', 'patient_mismatch'];
 const HERO = 'outage_critical_result';
+const BUILD = '__build';
 const ACTIONS = ['resend', 'fix_and_resend', 'reroute', 'quarantine', 'escalate'];
 const ACTION_LABEL = {
   resend: 'Resend', fix_and_resend: 'Fix & resend', reroute: 'Reroute', quarantine: 'Quarantine', escalate: 'Escalate',
@@ -139,6 +141,7 @@ const state = {
   models: null,
   batchRows: [],
   openStep: null,
+  builderOpen: false,
 };
 
 /* ---------- Mode label ---------- */
@@ -168,6 +171,11 @@ function renderChips() {
       disabled: state.busy,
       onclick: () => runScenario(s),
     }, h('span', { class: 'dot', 'aria-hidden': 'true' }), s.label)),
+    state.scenarios.length ? h('button', {
+      class: `chip more build${state.activeChip === BUILD ? ' on' : ''}`, type: 'button', 'data-key': 'chip-build', disabled: state.busy,
+      'aria-expanded': String(state.builderOpen),
+      onclick: () => (state.builderOpen ? closeBuilder() : openBuilder()),
+    }, '+ Build your own') : null,
     rest.length ? h('button', {
       class: 'chip more', type: 'button', 'data-key': 'chip-more', 'aria-expanded': String(state.showAll),
       onclick: () => { state.showAll = !state.showAll; renderChips(); },
@@ -484,6 +492,7 @@ async function triage(caseObj) {
 
 async function runScenario(s) {
   if (state.busy) return;
+  if (state.builderOpen) closeBuilder(false);
   state.activeChip = s.id;
   setBusy(true);
   try {
@@ -495,6 +504,7 @@ async function runScenario(s) {
 
 async function runBatch() {
   if (state.busy) return;
+  if (state.builderOpen) closeBuilder(false);
   state.activeChip = null;
   setBusy(true);
   $('batch-note').textContent = '';
@@ -515,6 +525,102 @@ async function runBatch() {
     $('batch-note').textContent = `Batch failed: ${e.message}`;
   } finally {
     setBusy(false);
+  }
+}
+
+/* ---------- Build your own ---------- */
+
+const field = (label, control, key) => h('label', { class: 'bf', for: key }, h('span', {}, label), control);
+
+/** The starting scenario for the panel: the one on screen, else the timeout, else the first. */
+function builderBase() {
+  const id = state.activeChip && state.activeChip !== BUILD ? state.activeChip : 'endpoint_timeout';
+  return state.scenarios.find((s) => s.id === id) ?? state.scenarios[0];
+}
+
+/** Fill the form's fields from a scenario's case (the dropdown picks one). */
+function loadBase(id) {
+  const c = (state.scenarios.find((s) => s.id === id) ?? state.scenarios[0]).case;
+  const ep = c.context?.endpoint ?? {};
+  $('b-fmt').textContent = c.format === 'fhir' ? 'FHIR (JSON)' : 'HL7 v2';
+  $('b-msg').value = messageToText(c.raw_message, c.format);
+  $('b-err').value = c.error_text ?? '';
+  $('b-down').checked = ep.up === false;
+  $('b-min').value = String(Number(ep.down_minutes) || 0);
+}
+
+function openBuilder() {
+  if (state.busy || !state.scenarios.length) return;
+  const base = builderBase();
+  const form = $('builder');
+  state.builderOpen = true;
+  form.replaceChildren(
+    h('h3', {}, 'Build your own failed message'),
+    field('Start from', h('select', { id: 'b-base', 'data-key': 'b-base', onchange: (e) => loadBase(e.target.value) },
+      ...state.scenarios.map((s) => h('option', { value: s.id, selected: s.id === base.id }, s.label))), 'b-base'),
+    h('p', { class: 'bf-fmt' }, 'Format: ', h('b', { id: 'b-fmt' })),
+    field('Message (one HL7 segment per line)', h('textarea', { id: 'b-msg', 'data-key': 'b-msg', rows: '7', spellcheck: 'false' }), 'b-msg'),
+    field('Error text', h('input', { id: 'b-err', 'data-key': 'b-err', type: 'text' }), 'b-err'),
+    h('div', { class: 'bf-ep' },
+      h('label', { class: 'bf-check', for: 'b-down' }, h('input', { id: 'b-down', 'data-key': 'b-down', type: 'checkbox' }), 'Endpoint is down'),
+      h('label', { class: 'bf-min', for: 'b-min' }, 'for ', h('input', { id: 'b-min', 'data-key': 'b-min', type: 'number', min: '0', step: '1' }), ' minutes')),
+    h('p', { class: 'err', id: 'b-errors', role: 'alert' }),
+    h('div', { class: 'act' },
+      h('button', { type: 'submit', class: 'pri', 'data-key': 'b-run' }, 'Run'),
+      h('button', { type: 'button', 'data-key': 'b-cancel', onclick: closeBuilder }, 'Cancel')));
+  loadBase(base.id);
+  form.hidden = false;
+  document.querySelector('.scr').hidden = true;
+  renderChips();
+  $('b-base').focus();
+}
+
+function closeBuilder(refocus = true) {
+  state.builderOpen = false;
+  $('builder').hidden = true;
+  document.querySelector('.scr').hidden = false;
+  renderChips();
+  if (refocus) $('chips').querySelector('[data-key="chip-build"]')?.focus();
+  requestAnimationFrame(drawWires);
+}
+
+async function runBuilt(ev) {
+  ev.preventDefault();
+  if (state.busy) return;
+  const base = state.scenarios.find((s) => s.id === $('b-base').value) ?? state.scenarios[0];
+  const c = buildCase(base.case, {
+    format: base.case.format,
+    message: $('b-msg').value,
+    errorText: $('b-err').value,
+    up: !$('b-down').checked,
+    downMinutes: $('b-min').value,
+  });
+  const problems = validateCase(c);
+  $('b-errors').textContent = problems.join(' ');
+  if (problems.length) return; // nothing is sent
+  const typed = { base: base.id, msg: $('b-msg').value, err: $('b-err').value, down: $('b-down').checked, min: $('b-min').value };
+  closeBuilder(); // focus moves to the build chip and stays there across the busy re-render
+  state.activeChip = BUILD;
+  setBusy(true);
+  let refused = '';
+  try {
+    if (!(await triage(c))) refused = state.triageError || 'The triage failed.';
+  } finally {
+    setBusy(false);
+  }
+  if (refused) {
+    // The API refused it (a 400 for instance): put the form back with the API's text so it can be fixed.
+    state.triageError = '';
+    state.activeChip = null;
+    renderAll();
+    openBuilder();
+    $('b-base').value = typed.base;
+    loadBase(typed.base);
+    $('b-msg').value = typed.msg;
+    $('b-err').value = typed.err;
+    $('b-down').checked = typed.down;
+    $('b-min').value = typed.min;
+    $('b-errors').textContent = refused;
   }
 }
 
@@ -548,6 +654,8 @@ async function boot() {
   try { state.models = await src.models(); } catch { state.models = null; }
   $('about').textContent = describeSource(src);
   $('batch-btn').addEventListener('click', runBatch);
+  $('builder').addEventListener('submit', runBuilt);
+  $('builder').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBuilder(); });
   $('knob-fast').addEventListener('click', () => cycleModel('fast'));
   $('knob-agent').addEventListener('click', () => cycleModel('agent'));
   window.addEventListener('resize', () => requestAnimationFrame(drawWires));
