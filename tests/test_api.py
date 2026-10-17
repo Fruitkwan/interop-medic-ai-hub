@@ -3,6 +3,7 @@
 Run: uv run python -m unittest tests/test_api.py -v
 """
 import json
+import re
 import unittest
 import urllib.error
 import urllib.request
@@ -26,6 +27,11 @@ def call(method, path, body=None):
 def call_json(method, path, body=None):
     status, raw = call(method, path, body)
     return status, json.loads(raw.decode("utf-8"))
+
+
+def call_text(url):
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        return resp.status, resp.read().decode("utf-8")
 
 
 def reachable():
@@ -56,6 +62,31 @@ class ApiTest(unittest.TestCase):
 
     def triage(self, case):
         return call_json("POST", "/triage", {"case": case})
+
+    def test_static_app_serves_files_only(self):
+        root = BASE.rsplit("/api", 1)[0]
+
+        def get(path):
+            try:
+                with urllib.request.urlopen(root + path, timeout=30) as resp:
+                    return resp.status
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        self.assertNotEqual(get("/EnsPortal.ProductionConfig.zen"), 200)
+        self.assertEqual(get("/index.html"), 200)
+        _, html = call_text(root + "/index.html")
+        for ref in re.findall(r'(?:src|href)="(?:\./)?((?:js|css)/[^"]+)"', html):
+            self.assertEqual(get("/" + ref), 200, ref)
+
+    def test_post_requires_json_content_type(self):
+        for ctype in ("text/plain", "application/x-www-form-urlencoded"):
+            req = urllib.request.Request(BASE + "/models", data=b'{"fast":"Mock","agent":"Mock"}', method="POST",
+                                         headers={"Content-Type": ctype})
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(req, timeout=30)
+            self.assertEqual(cm.exception.code, 415)
+            self.assertIn("error", json.loads(cm.exception.read().decode("utf-8")))
 
     def test_health(self):
         status, body = call_json("GET", "/health")
