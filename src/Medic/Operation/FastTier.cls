@@ -74,11 +74,13 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	quit sc
 }
 
-/// Trace stage for this provider: Mock, Jev (hosted typesafe endpoint) or Laya (any other SystemOne endpoint).
+/// Trace stage for this provider: Mock, Jev (hosted typesafe endpoint), Ollama (OLLAMA_BASE_URL or
+/// Ollama's port 11434) or Laya (any other SystemOne endpoint).
 Method StageName() As %String
 {
 	if ..ProviderClass = "Medic.Provider.JevMock" quit "Mock"
-	quit $select(..Config.baseUrl [ "typesafe": "Jev", 1: "Laya")
+	set url = ..Config.baseUrl, ollama = $system.Util.GetEnviron("OLLAMA_BASE_URL")
+	quit $select(url [ "typesafe": "Jev", ((ollama '= "") && (url = ollama)) || (url [ ":11434"): "Ollama", 1: "Laya")
 }
 
 }

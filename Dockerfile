@@ -13,3 +13,6 @@ RUN iris start IRIS \
  && iris session IRIS < iris.script | tee /tmp/medic-build.log \
  && iris stop IRIS quietly \
  && ! grep -E "^ERROR|ERROR #" /tmp/medic-build.log
+
+# A triage on a CPU-only local model (Ollama) can take minutes; the web gateway's default is 60 s.
+RUN f=/usr/irissys/csp/bin/CSP.ini; if [ -w "$f" ]; then sed -i 's/^Server_Response_Timeout=.*/Server_Response_Timeout=900/' "$f"; fi

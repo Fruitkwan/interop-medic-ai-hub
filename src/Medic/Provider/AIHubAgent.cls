@@ -20,6 +20,18 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 			$$$ThrowStatus($$$ERROR($$$GeneralError, "AI Hub is not installed in this IRIS image"))
 		}
 		set agent = $classmethod(..#AGENTCLASS, "%New")
+		// A configured LLM (a hosted provider from MEDIC_AGENT_MODELS, or a local Ollama model)
+		// replaces the AIHUB_* environment defaults. Only a local server (a base URL) may go without a key.
+		set cfg = $select($isobject(pConfig): pConfig, 1: {})
+		if cfg.provider '= "" {
+			if (cfg.apiKey = "") && (cfg.baseUrl = "") {
+				$$$ThrowStatus($$$ERROR($$$GeneralError, "no API key configured for provider "_cfg.provider))
+			}
+			set settings = {"api_key": ($select(cfg.apiKey '= "": cfg.apiKey, 1: "none"))}
+			if cfg.baseUrl '= "" set settings."base_url" = cfg.baseUrl
+			set agent.Provider = $classmethod("%AI.Provider", "Create", cfg.provider, settings)
+			if cfg.model '= "" set agent.Model = cfg.model
+		}
 		$$$ThrowOnError(agent.%Init())
 		// Policies go on before the session, so tool discovery sees them.
 		set trace = $classmethod(..#TRACECLASS, "%New")
@@ -39,11 +51,30 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		do pDecision.AddStep("Agent", "ok", pDecision.Action_" "_$fnumber(pDecision.Confidence, "", 2), pDecision.Rationale)
 		set pDecision.CostUSD = ..Cost(session.GetStats())
 	} catch ex {
-		set why = "AI Hub agent unavailable: "_$system.Status.GetOneErrorText(ex.AsStatus())
+		set why = "AI Hub agent unavailable: "_..ErrorText($system.Status.GetOneErrorText(ex.AsStatus()))
 		do ..Set(pDecision, "escalate", 0, 0.5, why)
 		do pDecision.AddStep("Agent", "bad", "unavailable", why)
 	}
 	quit $$$OK
+}
+
+/// One readable line for a provider error. LLM APIs append their whole JSON error body; a quota
+/// or rate-limit reply becomes "<provider> quota or rate limit reached (HTTP 429); retry in 14h37m".
+ClassMethod ErrorText(pText As %String) As %String
+{
+	set provider = "", wait = ""
+	if $locate(pText, "Provider '[^']+'", 1, , provider) set provider = $piece(provider, "'", 2)
+	if (pText [ "HTTP 429") || (pText [ "RESOURCE_EXHAUSTED") || ($zconvert(pText, "L") [ "rate limit") {
+		// "retry in 14h37m45.634481496s" -> "retry in 14h37m45s"
+		if $locate(pText, "retry in [0-9hm]+(\.[0-9]+)?s?", 1, , wait) {
+			set wait = "; "_$piece(wait, ".")_$select((wait [ ".") && ($extract(wait, *) = "s"): "s", 1: "")
+		}
+		quit $select(provider = "": "LLM", 1: provider)_" quota or rate limit reached (HTTP 429)"_wait
+	}
+	// Anything else: the text before the JSON body, on one line.
+	set text = $piece($piece(pText, "[{", 1), ": {", 1)
+	set text = $zstrip($translate(text, $char(10, 13), "  "), "<>=W")
+	quit $extract(text, 1, 200)_$select($length(text) > 200: "...", 1: "")
 }
 
 /// A short human value for a tool-call trace step, from the tool's raw (escaped, possibly

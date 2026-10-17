@@ -176,6 +176,14 @@ class ApiTest(unittest.TestCase):
         self.assertIn("Mock", body["available"]["fast"])
         self.assertIn("Mock", body["available"]["agent"])
 
+    def test_agent_models_are_labels_only(self):
+        _, body = call_json("GET", "/models")
+        for label in body["available"]["agent"]:
+            self.assertRegex(label, r"^[^=:,]{1,40}$", "the switch lists labels, never specs or keys")
+        status, body = call_json("POST", "/models", {"fast": "Mock", "agent": "NoSuchModel"})
+        self.assertEqual(status, 400)
+        self.assertIn("not available", body["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -154,6 +154,30 @@ AIHUB_MODEL=<model>
 AIHUB_API_KEY=<key>
 ```
 
+### Choosing the agent's model
+
+The agent's model switch on the web page lists every model in `MEDIC_AGENT_MODELS` whose key is
+configured, plus Mock and (with `OLLAMA_BASE_URL`) Ollama. Each entry is `Label=provider:model`;
+the provider is an AI Hub provider name (`gemini`, `openai`, `anthropic`, `xai`, `deepseek`, ... as
+listed by `##class(%AI.Provider).%GetProviders()`), and a blank model means the provider's default.
+
+```bash
+MEDIC_AGENT_MODELS=Gemini=gemini:gemini-3.5-flash,GPT=openai:gpt-5-mini,Claude=anthropic:claude-sonnet-5-5,Grok=xai:grok-4
+GEMINI_API_KEY=<key>
+OPENAI_API_KEY=<key>
+ANTHROPIC_API_KEY=<key>
+XAI_API_KEY=<key>
+```
+
+Keys stay on the server. For each provider the agent takes the key from IRIS Interoperability
+credentials named `Medic.<provider>` (e.g. `Medic.anthropic`, key in the Password field) if they
+exist, else `<PROVIDER>_API_KEY`, else the variable AI Hub names for that provider (`GOOGLE_API_KEY`
+for gemini), else `AIHUB_API_KEY` when the provider is `AIHUB_PROVIDER`. Entries with no key are
+not shown. The switch sends only the label; it sets `LLMProvider`, `LLMModel` and `LLMCredentials`
+(the credentials name, never the key) on `Medic.Agent`. Without `MEDIC_AGENT_MODELS` the switch
+offers the one `AIHUB_PROVIDER` / `AIHUB_MODEL` model. Cost tracking uses one
+`AIHUB_PRICE_*` pair for all of them.
+
 ### Fast tier: mock, Jev or Laya
 
 Jev (TypeSafe) and Laya (open weights, Apache 2.0) use the same `POST /v1/systemone` API, so one
@@ -188,6 +212,21 @@ To check the plumbing without either model, run `uv run python eval/fake_systemo
 Confidence from different models is not comparable, so re-run the eval after switching. The
 auto-apply threshold is fitted per model.
 
+### Local models with Ollama
+
+Ollama serves both tiers on your own machine, with no API keys:
+
+- **Fast tier:** a decision model such as `nimble-v3` answers Ollama's `POST /v1/systemone`, the same API as Jev, so `Medic.Provider.SystemOne` uses it unchanged.
+- **Agent:** any tool-calling chat model, such as `gemma4`, runs through AI Hub's `openai` provider pointed at Ollama's OpenAI-compatible `/v1`.
+
+```
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_FAST_MODEL=nimble-v3      # default
+OLLAMA_AGENT_MODEL=gemma4        # default; qwen3.8 (27B) needs a GPU: on a CPU it outlasts AI Hub's request timeout
+```
+
+Each tier's model switch on the web page then offers "Ollama". On a CPU-only machine a call can take minutes. The fast tier waits up to `OLLAMA_TIMEOUT` seconds (default 600), and the image raises the web gateway's response timeout to 900 s. The same values can be set by hand on `Medic.Agent` (LLMProvider `openai`, LLMModel, LLMBaseURL `http://host.docker.internal:11434/v1/`). Hosted providers that need a key (`openai`, `anthropic`, `xai`, ...) go through `MEDIC_AGENT_MODELS` (see "Choosing the agent's model") or `AIHUB_PROVIDER`, `AIHUB_MODEL` and `AIHUB_API_KEY`.
+
 ### Web page and REST API
 
 The image serves a static page at `http://localhost:52773/medic/index.html` (this IRIS build has no default-page setting, so the bare `/medic/` is a 404) and a same-origin REST API at `/medic/api` (health, scenarios, random cases, triage, approve/override, model switch). Both web applications are unauthenticated with role `%All`: this is a local demo, do not expose the container to a network. `LAYA_BASE_URL` (optional) adds a "Laya" choice to the fast-tier model switch. API tests: `uv run python -m unittest tests/test_api.py -v`.
@@ -220,7 +259,7 @@ Tests:
 
 ```bash
 uv run python -m unittest eval/test_score.py dataset/test_generate.py
-docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","")'
+docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","")'
 ```
 
 ## Dataset

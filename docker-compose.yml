@@ -37,12 +37,24 @@ services:
       AIHUB_API_KEY: ${AIHUB_API_KEY:-}
       AIHUB_PRICE_IN_PER_MTOK: ${AIHUB_PRICE_IN_PER_MTOK:-}
       AIHUB_PRICE_OUT_PER_MTOK: ${AIHUB_PRICE_OUT_PER_MTOK:-}
+      # Agent choices for the web page's model switch: "Label=provider:model,...". An entry is shown
+      # only when its key is set below (or in IRIS credentials Medic.<provider>). Blank = AIHUB_* only.
+      MEDIC_AGENT_MODELS: ${MEDIC_AGENT_MODELS:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
       SYSTEMONE_BASE_URL: ${SYSTEMONE_BASE_URL:-}
       SYSTEMONE_API_KEY: ${SYSTEMONE_API_KEY:-}
       SYSTEMONE_MODEL: ${SYSTEMONE_MODEL:-}
       SYSTEMONE_PRICE_PER_MTOK: ${SYSTEMONE_PRICE_PER_MTOK:-}
       # Laya base URL for the web page's model switch (fast tier "Laya"); blank hides that choice.
       LAYA_BASE_URL: ${LAYA_BASE_URL:-}
+      # Local Ollama for the model switch (fast tier and agent "Ollama"); blank hides those choices.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_FAST_MODEL: ${OLLAMA_FAST_MODEL:-}
+      OLLAMA_AGENT_MODEL: ${OLLAMA_AGENT_MODEL:-}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-}
     extra_hosts:
       # Lets the container reach a Laya server on the host (Linux; Docker Desktop has this already).
       - "host.docker.internal:host-gateway"

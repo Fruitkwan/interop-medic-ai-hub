@@ -75,6 +75,16 @@ Method TestToolValueIsReadable()
 	do $$$AssertTrue(($length(v) <= 40) && (v '[ "{") && (v '[ "\") && (v '[ """"), "fallback is short and clean: "_v)
 }
 
+Method TestErrorTextIsShort()
+{
+	set cls = "Medic.Provider.AIHubAgent", nl = $char(10)
+	set raw = "ERROR <%AICore>ProviderError: Provider 'gemini' error: Rate limit exceeded: Rate limit exceeded (HTTP 429): [{"_nl_"  ""error"": {"_nl_"    ""code"": 429,"_nl_"    ""message"": ""Quota exceeded.\nPlease retry in 14h37m45.634481496s."","_nl_"    ""status"": ""RESOURCE_EXHAUSTED""}}]"
+	do $$$AssertEquals($classmethod(cls, "ErrorText", raw), "gemini quota or rate limit reached (HTTP 429); retry in 14h37m45s")
+	set raw = "ERROR <%AICore>ProviderError: Provider 'openai' error: HTTP 404: {"_nl_"""error"": ""model 'qwen9' not found""}"
+	do $$$AssertEquals($classmethod(cls, "ErrorText", raw), "ERROR <%AICore>ProviderError: Provider 'openai' error: HTTP 404")
+	do $$$AssertEquals($classmethod(cls, "ErrorText", "AIHUB_API_KEY is not set"), "AIHUB_API_KEY is not set")
+}
+
 Method TestFailsSafeWithoutAIHub()
 {
 	quit:##class(%Dictionary.CompiledClass).%ExistsId("Medic.AIHub.TriageAgent")

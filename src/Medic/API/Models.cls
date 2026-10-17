@@ -1,5 +1,6 @@
 /// Which model each tier uses, switched at run time by setting host settings on the production items.
-/// Fast: Mock | Jev | Laya.  Agent: Mock | Gemini.  The effective value is the setting, else the env var.
+/// Fast: Mock | Jev | Laya | Ollama.  Agent: Mock | each MEDIC_AGENT_MODELS entry with a key | Ollama.
+/// The effective value is the setting, else the env var. Names only: keys stay on the server.
 Class Medic.API.Models
 {
 
@@ -24,6 +25,7 @@ ClassMethod CurrentFast() As %String
 	quit:(provider '= "Medic.Provider.SystemOne") "Mock"
 	set model = ..HostSetting(..#FASTITEM, "Model")
 	set url = ##class(Medic.Operation.FastTier).Pick(..HostSetting(..#FASTITEM, "BaseURL"), "SYSTEMONE_BASE_URL")
+	quit:(..Ollama() '= "")&&(url = ..Ollama()) "Ollama"
 	set laya = $system.Util.GetEnviron("LAYA_BASE_URL")
 	quit $select((model = ..#NOMODEL) || ((laya '= "") && (url = laya) && (url '= $system.Util.GetEnviron("SYSTEMONE_BASE_URL"))): "Laya", 1: "Jev")
 }
@@ -31,7 +33,75 @@ ClassMethod CurrentFast() As %String
 ClassMethod CurrentAgent() As %String
 {
 	set provider = ##class(Medic.Operation.FastTier).Pick(..HostSetting(..#AGENTITEM, "ProviderClass"), "MEDIC_AGENT_PROVIDER", "Medic.Provider.AgentMock")
-	quit $select(provider = "Medic.Provider.AIHubAgent": "Gemini", 1: "Mock")
+	quit:(provider '= "Medic.Provider.AIHubAgent") "Mock"
+	quit:(..HostSetting(..#AGENTITEM, "LLMBaseURL") '= "") "Ollama"
+	set llm = ..HostSetting(..#AGENTITEM, "LLMProvider"), model = ..HostSetting(..#AGENTITEM, "LLMModel")
+	// Blank LLM settings mean the AIHUB_* environment.
+	if llm = "" set llm = ..Env("AIHUB_PROVIDER", "openai"), model = $system.Util.GetEnviron("AIHUB_MODEL")
+	set it = ..AgentModels().%GetIterator(), found = ""
+	while (found = "") && it.%GetNext(, .m) {
+		if (m.provider = $zconvert(llm, "L")) && (m.model = model) set found = m.label
+	}
+	quit $select(found '= "": found, 1: llm_$select(model '= "": ":"_model, 1: ""))
+}
+
+/// The agent's hosted models: MEDIC_AGENT_MODELS, else one entry from AIHUB_PROVIDER and AIHUB_MODEL.
+ClassMethod AgentModels() As %DynamicArray
+{
+	set spec = $system.Util.GetEnviron("MEDIC_AGENT_MODELS")
+	if spec = "" set spec = ..Env("AIHUB_PROVIDER", "openai")_":"_$system.Util.GetEnviron("AIHUB_MODEL")
+	quit ..ParseModels(spec)
+}
+
+/// "Gemini=gemini:gemini-3.5-flash,GPT=openai:gpt-5-mini" -> [{"label","provider","model"}, ...].
+/// The label is optional (it defaults from the provider), so is the model (the provider's default).
+/// Everything after the first colon is the model, so ids such as "qwen3:8b" survive.
+/// Mock and Ollama are reserved, and a repeated label keeps its first entry.
+ClassMethod ParseModels(pSpec As %String) As %DynamicArray
+{
+	set out = [], seen = ",mock,ollama,"
+	for i = 1:1:$length(pSpec, ",") {
+		set item = $zstrip($piece(pSpec, ",", i), "<>W")
+		continue:item=""
+		set label = "", ref = item
+		if item [ "=" set label = $zstrip($piece(item, "="), "<>W"), ref = $piece(item, "=", 2, *)
+		set provider = $zconvert($zstrip($piece(ref, ":"), "<>W"), "L"), model = $zstrip($piece(ref, ":", 2, *), "<>W")
+		continue:provider=""
+		if label = "" set label = ..Nice(provider)
+		continue:(seen [ (","_$zconvert(label, "L")_","))
+		set seen = seen_$zconvert(label, "L")_","
+		do out.%Push({"label": (label), "provider": (provider), "model": (model)})
+	}
+	quit out
+}
+
+/// A display name for a provider given without a label.
+ClassMethod Nice(pProvider As %String) As %String
+{
+	set p = $zconvert(pProvider, "L")
+	quit $case(p, "openai": "GPT", "anthropic": "Claude", "gemini": "Gemini", "xai": "Grok", "grok": "Grok", : $zconvert($extract(p), "U")_$extract(p, 2, *))
+}
+
+/// The agent model entry with this label, or "".
+ClassMethod AgentModel(pLabel As %String) As %DynamicObject
+{
+	set it = ..AgentModels().%GetIterator(), found = ""
+	while (found = "") && it.%GetNext(, .m) { if m.label = pLabel set found = m }
+	quit found
+}
+
+/// OLLAMA_BASE_URL as the container reaches it, e.g. http://host.docker.internal:11434; blank hides the Ollama choices.
+ClassMethod Ollama() As %String
+{
+	set url = $system.Util.GetEnviron("OLLAMA_BASE_URL")
+	quit $select($extract(url, *) = "/": $extract(url, 1, *-1), 1: url)
+}
+
+/// Environment value or a default.
+ClassMethod Env(pName As %String, pDefault As %String = "") As %String
+{
+	set v = $system.Util.GetEnviron(pName)
+	quit $select(v '= "": v, 1: pDefault)
 }
 
 ClassMethod Available(pTier As %String) As %DynamicArray
@@ -40,8 +110,14 @@ ClassMethod Available(pTier As %String) As %DynamicArray
 	if pTier = "fast" {
 		if ($system.Util.GetEnviron("SYSTEMONE_API_KEY") '= "") && ($system.Util.GetEnviron("SYSTEMONE_BASE_URL") '= "") do out.%Push("Jev")
 		if $system.Util.GetEnviron("LAYA_BASE_URL") '= "" do out.%Push("Laya")
+		if ..Ollama() '= "" do out.%Push("Ollama")
 	} else {
-		if ($system.Util.GetEnviron("AIHUB_API_KEY") '= "") && ##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent") do out.%Push("Gemini")
+		set aihub = ##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")
+		if aihub {
+			set it = ..AgentModels().%GetIterator()
+			while it.%GetNext(, .m) { if ##class(Medic.Operation.Agent).HasKey(m.provider) do out.%Push(m.label) }
+			if ..Ollama() '= "" do out.%Push("Ollama")
+		}
 	}
 	quit out
 }
@@ -54,16 +130,34 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 	if '..Has(..Available("agent"), pAgent) do ..Fail(pAgent, "agent")
 
 	kill fast, agent
+	// Local models on a CPU can take minutes per call; hosted ones get the usual 10 s.
+	set fast("TimeoutSeconds") = 10
 	if pFast = "Jev" {
 		set fast("ProviderClass") = "Medic.Provider.SystemOne"
 		set fast("BaseURL") = $system.Util.GetEnviron("SYSTEMONE_BASE_URL"), fast("Model") = $system.Util.GetEnviron("SYSTEMONE_MODEL")
 	} elseif pFast = "Laya" {
 		set fast("ProviderClass") = "Medic.Provider.SystemOne"
 		set fast("BaseURL") = $system.Util.GetEnviron("LAYA_BASE_URL"), fast("Model") = ..#NOMODEL
+	} elseif pFast = "Ollama" {
+		set fast("ProviderClass") = "Medic.Provider.SystemOne"
+		set fast("BaseURL") = ..Ollama(), fast("Model") = ..Env("OLLAMA_FAST_MODEL", "nimble-v3")
+		set fast("TimeoutSeconds") = +..Env("OLLAMA_TIMEOUT", 600)
 	} else {
 		set fast("ProviderClass") = "Medic.Provider.JevMock", fast("BaseURL") = "", fast("Model") = ""
 	}
-	set agent("ProviderClass") = $select(pAgent = "Gemini": "Medic.Provider.AIHubAgent", 1: "Medic.Provider.AgentMock")
+	set agent("ProviderClass") = $select(pAgent = "Mock": "Medic.Provider.AgentMock", 1: "Medic.Provider.AIHubAgent")
+	set agent("LLMProvider") = "", agent("LLMModel") = "", agent("LLMBaseURL") = "", agent("LLMCredentials") = ""
+	if pAgent = "Ollama" {
+		// Ollama speaks the OpenAI API under /v1 and needs no key.
+		set agent("LLMProvider") = "openai", agent("LLMModel") = ..Env("OLLAMA_AGENT_MODEL", "gemma4")
+		set agent("LLMBaseURL") = ..Ollama()_"/v1/"
+	} elseif pAgent '= "Mock" {
+		// Only the provider, the model and the name of the credentials go in the settings;
+		// the operation reads the key itself (Medic.Operation.Agent.APIKey).
+		set m = ..AgentModel(pAgent)
+		set agent("LLMProvider") = m.provider, agent("LLMModel") = m.model
+		set agent("LLMCredentials") = ##class(Medic.Operation.Agent).Credential(m.provider)
+	}
 
 	if (pFast '= ..CurrentFast()) || (pAgent '= ..CurrentAgent()) {
 		$$$ThrowOnError(..Apply(.fast, .agent))
