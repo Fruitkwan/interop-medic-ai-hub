@@ -1,5 +1,39 @@
 # Interop Medic
 
+## For judges: two minutes
+
+- **Public link:** `https://<user>.github.io/<repo>/` (published when the contest opens). It is a
+  static copy of the page that replays a recorded run.
+- **Local:** `docker compose up -d --build`, then open http://localhost:52773/medic/index.html. The
+  page needs no sign-in. The Management Portal uses `_SYSTEM` / `SYS`, or your `IRIS_PASSWORD`.
+- **What to click:** pick **Critical result**, watch the trace build, then **Approve**. Then
+  **Run a batch of 5**, and finally **+ Build your own** to write a message of your own.
+- **The labels:**
+  - **Live** means the page is talking to the running IRIS production.
+  - **Replay of a real run** means it is replaying a recorded bundle (`web/data/bundle.json`), as on
+    the public site.
+  - **Mock** means the models are the offline mocks.
+  - Downstream effects (resend, reroute and so on) are marked "(simulated)": nothing downstream exists.
+- **Real models:** Jev (fast tier) and Gemini via AI Hub (agent) need keys in `.env` and the AI Hub
+  build 154 image (see below). Without them everything runs on the mock models, offline.
+- **Safety:** the `/medic` web applications are unauthenticated, for a local demo only. Do not expose
+  port 52773.
+- **The demo production** runs `Medic.Triage` with `DryRun` off, so auto-applied decisions show up on
+  the page; every effect is still simulated.
+- **Tests:** `node --test "web/tests/*.test.mjs"` for the page, `uv run python -m unittest
+  eval/test_record.py` for the recorder.
+- **Re-recording the public bundle:**
+
+  ```bash
+  uv run python eval/record.py --batches 3 --out web/data/bundle.json
+  ```
+
+  If any case is skipped (for example on a quota error), the recorder leaves the bundle untouched,
+  writes `bundle.partial.json` next to it and exits nonzero; `--allow-partial` overrides that. The committed bundle is currently a
+  **Mock/Mock** recording. A real Jev + Gemini recording replaces it once that has been run.
+- **Publishing:** the `Deploy web/ to GitHub Pages` workflow (`.github/workflows/pages.yml`) is
+  manual (`workflow_dispatch`) and runs the page tests before it deploys `web/`.
+
 An agent that triages failed HL7 v2 and FHIR messages in InterSystems IRIS Interoperability.
 For each errored or suspended message it decides one of **resend**, **fix and resend**,
 **reroute**, **quarantine** or **escalate**, with a confidence, a severity, a rationale and a
