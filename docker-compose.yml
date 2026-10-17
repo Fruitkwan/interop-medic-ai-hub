@@ -24,6 +24,11 @@ services:
     volumes:
       - ./data:/data
       - ./dataset:/dataset:ro
+    # Every .env variable reaches the container, so any provider's <PROVIDER>_API_KEY and
+    # <PROVIDER>_BASE_URL (OPENROUTER_API_KEY, INCEPTION_API_KEY, ...) works without listing it here.
+    env_file:
+      - path: .env
+        required: false
     # Fast tier: the offline mock by default. For Jev or Laya set MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne
     # and SYSTEMONE_BASE_URL (put keys in a git-ignored .env file). See README.
     environment:

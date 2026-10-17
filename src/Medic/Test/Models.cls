@@ -35,7 +35,8 @@ Method TestKeyFromCredentials()
 	do $$$AssertStatusOK(##class(Ens.Config.Credentials).SetCredential(..#CRED, "", "sk-test-not-real", 1))
 	do $$$AssertEquals(##class(Medic.Operation.Agent).Credential("zzTestProvider"), ..#CRED)
 	do $$$AssertEquals(##class(Medic.Operation.Agent).APIKey("zzTestProvider", ..#CRED), "sk-test-not-real")
-	do $$$AssertNotTrue(##class(Medic.Operation.Agent).HasKey("zzTestProvider"), "a provider AI Hub does not know is never offered")
+	do $$$AssertNotTrue(##class(Medic.Operation.Agent).HasKey("zzTestProvider"), "an unknown provider without ZZTESTPROVIDER_BASE_URL is never offered")
+	do $$$AssertEquals(##class(Medic.Operation.Agent).BaseURL("zzTestProvider"), "")
 	do ##class(Ens.Config.Credentials).%DeleteId(..#CRED)
 }
 

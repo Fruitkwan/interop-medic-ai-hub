@@ -44,6 +44,8 @@ Method OnInit() As %Status
 	set ..Config = {}
 	if ..LLMProvider '= "" {
 		set ..Config = {"provider": (..LLMProvider), "model": (..LLMModel), "baseUrl": (..LLMBaseURL)}
+		// A provider AI Hub does not know (e.g. inception) is an OpenAI-compatible API at its base URL.
+		if (..LLMBaseURL '= "") && '$isobject(..ProviderInfo(..LLMProvider)) set ..Config.provider = "openai"
 		set key = ..APIKey(..LLMProvider, ..LLMCredentials)
 		if key '= "" set ..Config.apiKey = key
 	}
@@ -118,11 +120,21 @@ ClassMethod Credential(pProvider As %String) As %String
 	quit $select(##class(Ens.Config.Credentials).GetValue(id, "Password") '= "": id, 1: "")
 }
 
-/// True when AI Hub knows the provider and a key for it is configured on the server.
+/// True when the provider can be reached (AI Hub knows it, or <PROVIDER>_BASE_URL names an
+/// OpenAI-compatible API) and a key for it is configured on the server.
 ClassMethod HasKey(pProvider As %String) As %Boolean
 {
-	quit:'$isobject(..ProviderInfo(pProvider)) 0
+	quit:(('$isobject(..ProviderInfo(pProvider))) && (..BaseURL(pProvider) = "")) 0
 	quit ..APIKey(pProvider, ..Credential(pProvider)) '= ""
+}
+
+/// <PROVIDER>_BASE_URL, e.g. INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/, for a provider
+/// AI Hub does not know; blank for the others (they use AI Hub's own endpoint).
+ClassMethod BaseURL(pProvider As %String) As %String
+{
+	quit:$isobject(..ProviderInfo(pProvider)) ""
+	set url = $system.Util.GetEnviron($translate($zconvert(pProvider, "U"), "-.", "__")_"_BASE_URL")
+	quit $select((url = "") || ($extract(url, *) = "/"): url, 1: url_"/")
 }
 
 /// The provider's entry from %AI.Provider.%GetProviders() (by name or alias), or "" without AI Hub.

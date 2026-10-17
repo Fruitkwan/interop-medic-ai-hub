@@ -34,7 +34,7 @@ ClassMethod CurrentAgent() As %String
 {
 	set provider = ##class(Medic.Operation.FastTier).Pick(..HostSetting(..#AGENTITEM, "ProviderClass"), "MEDIC_AGENT_PROVIDER", "Medic.Provider.AgentMock")
 	quit:(provider '= "Medic.Provider.AIHubAgent") "Mock"
-	quit:(..HostSetting(..#AGENTITEM, "LLMBaseURL") '= "") "Ollama"
+	quit:((..Ollama() '= "") && (..HostSetting(..#AGENTITEM, "LLMBaseURL") = (..Ollama()_"/v1/"))) "Ollama"
 	set llm = ..HostSetting(..#AGENTITEM, "LLMProvider"), model = ..HostSetting(..#AGENTITEM, "LLMModel")
 	// Blank LLM settings mean the AIHUB_* environment.
 	if llm = "" set llm = ..Env("AIHUB_PROVIDER", "openai"), model = $system.Util.GetEnviron("AIHUB_MODEL")
@@ -156,6 +156,7 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 		// the operation reads the key itself (Medic.Operation.Agent.APIKey).
 		set m = ..AgentModel(pAgent)
 		set agent("LLMProvider") = m.provider, agent("LLMModel") = m.model
+		set agent("LLMBaseURL") = ##class(Medic.Operation.Agent).BaseURL(m.provider)
 		set agent("LLMCredentials") = ##class(Medic.Operation.Agent).Credential(m.provider)
 	}
 

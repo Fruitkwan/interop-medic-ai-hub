@@ -173,7 +173,16 @@ Keys stay on the server. For each provider the agent takes the key from IRIS Int
 credentials named `Medic.<provider>` (e.g. `Medic.anthropic`, key in the Password field) if they
 exist, else `<PROVIDER>_API_KEY`, else the variable AI Hub names for that provider (`GOOGLE_API_KEY`
 for gemini), else `AIHUB_API_KEY` when the provider is `AIHUB_PROVIDER`. Entries with no key are
-not shown. The switch sends only the label; it sets `LLMProvider`, `LLMModel` and `LLMCredentials`
+not shown.
+
+OpenRouter is one of AI Hub's providers, so its models need only `OPENROUTER_API_KEY` and entries
+such as `Kimi=openrouter:moonshotai/kimi-k2` (the model is OpenRouter's slug). Any other
+OpenAI-compatible API works under a name AI Hub does not know, with `<NAME>_BASE_URL` and
+`<NAME>_API_KEY`: for Inception, `Mercury=inception:mercury-2.5`,
+`INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/` and `INCEPTION_API_KEY`. The container reads
+every `.env` variable, so new keys need no change to `docker-compose.yml`.
+
+The switch sends only the label; it sets `LLMProvider`, `LLMModel`, `LLMBaseURL` and `LLMCredentials`
 (the credentials name, never the key) on `Medic.Agent`. Without `MEDIC_AGENT_MODELS` the switch
 offers the one `AIHUB_PROVIDER` / `AIHUB_MODEL` model. Cost tracking uses one
 `AIHUB_PRICE_*` pair for all of them.
