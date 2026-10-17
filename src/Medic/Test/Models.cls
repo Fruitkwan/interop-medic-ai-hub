@@ -17,7 +17,7 @@ Method TestParsesLabelsProvidersAndModels()
 
 Method TestDefaultsAndEdgeCases()
 {
-	set list = ##class(Medic.API.Models).ParseModels("anthropic,openai:,Local=openrouter:qwen/qwen3:8b,,Mock=openai:x,ollama=openai:y,GPT=openai:dup")
+	set list = ##class(Medic.API.Models).ParseModels("anthropic,openai:,Local=openrouter:qwen/qwen3:8b,,Mock=openai:x,GPT=openai:dup")
 	do $$$AssertEquals(list.%Size(), 3, "blank, reserved and duplicate labels dropped")
 	do $$$AssertEquals(list.%Get(0).label, "Claude", "label from the provider")
 	do $$$AssertEquals(list.%Get(0).model, "", "blank model means the provider default")
@@ -50,6 +50,32 @@ Method TestHostedProviderWithoutKeyEscalates()
 	if ##class(%Dictionary.CompiledClass).%ExistsId("Medic.AIHub.TriageAgent") {
 		do $$$AssertTrue(d.Rationale [ "no API key configured for provider openai", d.Rationale)
 	}
+}
+
+Method TestFastReservesItsOwnNames()
+{
+	set list = ##class(Medic.API.Models).ParseModels("Jev=openai:x,Mercury 2.5=inception:mercury-2.5", ",mock,jev,laya,")
+	do $$$AssertEquals(list.%Size(), 1)
+	do $$$AssertEquals(list.%Get(0).label, "Mercury 2.5", "labels may contain spaces")
+}
+
+/// The chat fast tier maps a JSON reply and keeps the wrong-patient guardrail.
+Method TestChatFastReply()
+{
+	set cls = "Medic.Provider.ChatFast", d = ##class(Medic.Msg.Decision).%New()
+	do $$$AssertStatusOK($classmethod(cls, "ApplyReply", "{""action"":""Resend"",""confidence"":0.93,""severity"":0.2,""identity_risk"":0.05,""rationale"":""timeout""}", d))
+	do $$$AssertEquals(d.Action, "resend")
+	do $$$AssertEquals(d.Confidence, 0.93)
+	set d = ##class(Medic.Msg.Decision).%New()
+	do $$$AssertStatusOK($classmethod(cls, "ApplyReply", "```json"_$char(10)_"{""action"":""fix_and_resend"",""confidence"":0.9,""severity"":0.3,""identity_risk"":0.8}"_$char(10)_"```", d))
+	do $$$AssertEquals(d.Action, "escalate", "identity risk 0.8 forces escalate")
+	do $$$AssertTrue(d.Severity >= 0.9)
+	do $$$AssertStatusNotOK($classmethod(cls, "ApplyReply", "{""action"":""delete""}", d))
+	do $$$AssertStatusNotOK($classmethod(cls, "ApplyReply", "no json here", d))
+	set req = $classmethod(cls, "BuildRequest", ##class(Medic.Test.SystemOne).Request(), "mercury-2.5")
+	do $$$AssertEquals(req.model, "mercury-2.5")
+	do $$$AssertTrue(req.messages.%Get(0).content [ "identity_risk")
+	do $$$AssertTrue(req.messages.%Get(1).content [ "Error: ")
 }
 
 Method TestRejectsUnknownAgent()

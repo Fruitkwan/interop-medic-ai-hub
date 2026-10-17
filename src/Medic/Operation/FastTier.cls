@@ -25,7 +25,14 @@ Property TimeoutSeconds As %Integer [ InitialExpression = 10 ];
 /// Blank means SYSTEMONE_PRICE_PER_MTOK, else 0.
 Property PricePerMTokens As %String;
 
-Parameter SETTINGS = "ProviderClass:Basic,BaseURL:SystemOne,Model:SystemOne,Credentials:SystemOne:credentialsSelector,TimeoutSeconds:SystemOne,PricePerMTokens:SystemOne";
+/// For Medic.Provider.ChatFast: the provider whose key to use (inception -> INCEPTION_API_KEY or
+/// credentials Medic.inception; see Medic.Operation.Agent.APIKey). Blank means Credentials / SYSTEMONE_API_KEY.
+Property KeyProvider As %String(MAXLEN = 64);
+
+/// Name of this tier's step in the trace (e.g. Mercury 2.5). Blank means Mock, Jev, Ollama or Laya.
+Property Stage As %String(MAXLEN = 64);
+
+Parameter SETTINGS = "ProviderClass:Basic,BaseURL:SystemOne,Model:SystemOne,Credentials:SystemOne:credentialsSelector,TimeoutSeconds:SystemOne,PricePerMTokens:SystemOne,KeyProvider:SystemOne,Stage:Basic";
 
 /// Resolved provider settings handed to Decide().
 Property Config As %DynamicObject [ Transient ];
@@ -35,10 +42,12 @@ Method OnInit() As %Status
 	set ..ProviderClass = ..Pick(..ProviderClass, "MEDIC_FAST_PROVIDER", "Medic.Provider.JevMock")
 	set key = ""
 	if ..Credentials '= "" set key = ##class(Ens.Config.Credentials).GetValue(..Credentials, "Password")
+	if ..KeyProvider '= "" set key = ##class(Medic.Operation.Agent).APIKey(..KeyProvider, ##class(Medic.Operation.Agent).Credential(..KeyProvider))
+	// A chat model's key never falls back to SYSTEMONE_API_KEY (that would send Jev's key elsewhere).
 	set ..Config = {
 		"baseUrl": (..Pick(..BaseURL, "SYSTEMONE_BASE_URL")),
 		"model": (..ModelId()),
-		"apiKey": (..Pick(key, "SYSTEMONE_API_KEY")),
+		"apiKey": ($select(..KeyProvider '= "": key, 1: ..Pick(key, "SYSTEMONE_API_KEY"))),
 		"timeout": (..TimeoutSeconds),
 		"pricePerMTok": (+..Pick(..PricePerMTokens, "SYSTEMONE_PRICE_PER_MTOK", 0))
 	}
@@ -78,6 +87,7 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 /// Ollama's port 11434) or Laya (any other SystemOne endpoint).
 Method StageName() As %String
 {
+	if ..Stage '= "" quit ..Stage
 	if ..ProviderClass = "Medic.Provider.JevMock" quit "Mock"
 	set url = ..Config.baseUrl, ollama = $system.Util.GetEnviron("OLLAMA_BASE_URL")
 	quit $select(url [ "typesafe": "Jev", ((ollama '= "") && (url = ollama)) || (url [ ":11434"): "Ollama", 1: "Laya")

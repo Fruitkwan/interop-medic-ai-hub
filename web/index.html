@@ -5,20 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Interop Medic</title>
   <meta name="description" content="Watch an AI Hub agent triage failed HL7 and FHIR messages, check the facts with its tools, and hand risky cases to a person.">
-  <link rel="stylesheet" href="css/hub.css">
-  <script type="module" src="js/hub.js"></script>
+  <link rel="stylesheet" href="css/hub.css?v=8">
+  <script type="module" src="js/hub.js?v=8"></script>
 </head>
 <body>
   <header class="top">
-    <h1>Interop Medic</h1>
-    <p class="lede">Failed HL7 and FHIR messages, triaged in InterSystems IRIS. A fast model answers first,
-      an AI Hub agent checks the facts with its tools, and a policy decides whether a person has to look.
-      Pick a message, then click any numbered step to see why.</p>
-    <p class="about" id="about"></p>
-    <p class="notice" id="notice" role="status" hidden></p>
+    <div class="brand-block">
+      <img src="assets/interop-medic-mark.png" alt="" class="brand-mark">
+      <div><h1>Interop Medic</h1><p class="tagline">Evidence Canvas</p></div>
+    </div>
+    <div class="intro-block">
+      <p class="lede">Triage failed HL7 and FHIR messages with AI you can trust.</p>
+      <p class="header-copy">A fast model answers first, an AI Hub agent checks the facts with its tools,<br>and a policy decides whether a person has to look.</p>
+    </div>
+    <div class="status-block">
+      <span class="live-pill"><i></i>Live</span>
+      <p class="about" id="about"></p>
+      <p class="notice" id="notice" role="status" hidden></p>
+    </div>
+    <time class="header-time" id="header-time"></time>
   </header>
 
+  <nav class="view-tabs" aria-label="Demo views" role="tablist">
+    <button type="button" class="view-tab on" id="tab-demo" role="tab" aria-selected="true" aria-controls="panel-demo">Live triage demo</button>
+    <button type="button" class="view-tab" id="tab-inside" role="tab" aria-selected="false" aria-controls="panel-inside" tabindex="-1">Evidence Canvas</button>
+  </nav>
+
   <main class="wrap">
+    <div id="panel-demo" role="tabpanel" aria-labelledby="tab-demo">
     <section class="hub" aria-label="Triage">
       <div class="col-chips">
         <h2 class="h">Failed messages</h2>
@@ -40,8 +54,8 @@
           <div class="drawer" id="drawer" hidden></div>
         </div>
         <div class="knobs">
-          <button type="button" class="knob" id="knob-fast" data-key="knob-fast"><small>Fast</small> <span class="name">…</span></button>
-          <button type="button" class="knob" id="knob-agent" data-key="knob-agent"><small>Agent</small> <span class="name">…</span></button>
+          <button type="button" class="knob" id="knob-fast" data-key="knob-fast" aria-haspopup="menu" aria-expanded="false"><small>Fast</small> <span class="name">…</span></button>
+          <button type="button" class="knob" id="knob-agent" data-key="knob-agent" aria-haspopup="menu" aria-expanded="false"><small>Agent</small> <span class="name">…</span></button>
         </div>
         <p class="knob-note" id="knob-note"></p>
       </div>
@@ -73,8 +87,62 @@
         </table>
       </div>
     </section>
+    </div>
+
+    <section class="evidence" id="panel-inside" role="tabpanel" aria-labelledby="tab-inside" hidden>
+      <div class="evidence-kpis" id="evidence-kpis" aria-label="Batch results"></div>
+      <div class="evidence-grid">
+        <aside class="message-queue">
+          <div class="queue-head"><h2>Failed Messages <span id="evidence-count"></span></h2><span>Newest first⌄</span></div>
+          <div class="queue-list" id="evidence-list"></div>
+          <div class="queue-actions">
+            <button type="button" class="secondary" id="evidence-build">＋ Build your own scenario</button>
+            <button type="button" class="primary" id="evidence-batch">▶ &nbsp; Run a batch of 5</button>
+          </div>
+        </aside>
+
+        <section class="case-canvas" aria-live="polite">
+          <header class="case-head">
+            <div><h2 id="evidence-title">Select a failed message</h2><p id="evidence-meta">Choose a case from the queue to see every decision step.</p></div>
+            <span class="issue-pill" id="evidence-issue" hidden></span>
+          </header>
+          <ol class="stage-line" aria-label="Decision stages">
+            <li class="done"><span>1</span><b>Message<br>Selected</b></li>
+            <li><span>2</span><b>Fast Model<br>Decision</b></li>
+            <li><span>3</span><b>AI Agent<br>Verification</b></li>
+            <li><span>4</span><b>Policy &amp; Outcome</b></li>
+          </ol>
+          <div class="analysis-pair">
+            <article class="analysis-card fast-card">
+              <header><span class="evidence-icon">ϟ</span><h3>Fast Model (first pass)</h3><span class="timing" id="fast-time">—</span></header>
+              <div class="analysis-body"><small>Predicted issue</small><b id="fast-result">Waiting for a message</b><small>Reasoning (summary)</small><p id="fast-reason">Select a failed message to begin.</p><div class="confidence"><span>Confidence</span><b id="fast-confidence">—</b></div><div class="meter"><i id="fast-meter"></i></div></div>
+            </article>
+            <article class="analysis-card agent-card">
+              <header><span class="evidence-icon">✦</span><h3>AI Agent Verification</h3><span class="timing" id="agent-time">—</span></header>
+              <div class="analysis-body"><small>Verification</small><b id="agent-result">Waiting for evidence</b><small>Checks performed</small><ul id="agent-checks"><li>Select a message to inspect the agent trace.</li></ul><small>Agent conclusion</small><p id="agent-conclusion">The agent's tool-grounded conclusion appears here.</p></div>
+            </article>
+          </div>
+          <article class="result-row"><span class="evidence-icon">▣</span><div><small>Policy Decision</small><b id="policy-result">No decision yet.</b><p id="policy-detail">The deterministic policy runs after model verification.</p></div><span class="safe-pill" id="policy-badge" hidden></span></article>
+          <article class="result-row"><span class="evidence-icon">◎</span><div><small>Outcome</small><b id="canvas-outcome">Nothing to act on yet.</b><p id="canvas-outcome-detail">No downstream system has received a message.</p></div></article>
+          <footer class="canvas-controls">
+            <span>Model mode ⓘ</span>
+            <button type="button" class="model" id="evidence-fast" aria-haspopup="menu" aria-expanded="false">ϟ &nbsp; Fast: <span class="name">…</span></button>
+            <button type="button" class="model" id="evidence-agent" aria-haspopup="menu" aria-expanded="false">✦ &nbsp; Agent: <span class="name">…</span></button>
+            <button type="button" class="run-again" id="evidence-rerun">↻ &nbsp; Run this message again</button>
+          </footer>
+        </section>
+
+        <aside class="evidence-audit">
+          <header><h2>Audit trail</h2><span>All steps⌄</span></header>
+          <ol id="evidence-events"></ol>
+        </aside>
+      </div>
+    </section>
   </main>
 
-  <footer class="foot">Synthetic patients only. Every production effect on this page is simulated: nothing downstream receives a message.</footer>
+  <footer class="foot">
+    <div><b>Built on InterSystems IRIS</b><span>Interoperability · AI Hub · Vector Search · Auditable decisions</span></div>
+    <p>Synthetic patients only. Every production effect on this page is simulated; nothing downstream receives a message.</p>
+  </footer>
 </body>
 </html>

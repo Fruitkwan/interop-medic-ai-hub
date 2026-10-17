@@ -3,7 +3,7 @@
 // recorded replay plus the browser mock models). The exported helpers are pure and unit-tested.
 import { detectSource } from './source.js';
 import { SAMPLE_SCENARIOS } from './samples.js';
-import { buildCase, validateCase, messageToText } from './builder.js';
+import { buildCase, validateCase, messageToText, parseLoadedFile, MAX_FILE_BYTES } from './builder.js';
 
 /* ---------- Pure helpers (tested in web/tests/hub.test.mjs) ---------- */
 
@@ -80,6 +80,41 @@ const clock = (at) => (at instanceof Date ? at.toISOString().slice(11, 19) : Str
 
 const $ = (id) => document.getElementById(id);
 
+function selectView(name, focus = false) {
+  const inside = name === 'inside';
+  $('panel-demo').hidden = inside;
+  $('panel-inside').hidden = !inside;
+  for (const [tab, selected] of [[$('tab-demo'), !inside], [$('tab-inside'), inside]]) {
+    tab.classList.toggle('on', selected);
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  if (inside) renderEvidence();
+  if (!inside) requestAnimationFrame(drawWires);
+  window.scrollTo(0, 0);
+  if (focus) (inside ? $('tab-inside') : $('tab-demo')).focus();
+}
+
+function setupViews() {
+  $('tab-demo').addEventListener('click', () => selectView('demo'));
+  $('tab-inside').addEventListener('click', () => selectView('inside'));
+  $('evidence-batch').addEventListener('click', runBatch);
+  $('evidence-build').addEventListener('click', () => { selectView('demo'); openBuilder(); });
+  $('evidence-fast').addEventListener('click', (e) => toggleModelMenu('fast', e.currentTarget));
+  $('evidence-agent').addEventListener('click', (e) => toggleModelMenu('agent', e.currentTarget));
+  $('evidence-rerun').addEventListener('click', () => {
+    const scenario = state.scenarios.find((s) => s.id === state.activeChip);
+    if (scenario) runScenario(scenario);
+  });
+  for (const tab of [$('tab-demo'), $('tab-inside')]) {
+    tab.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      selectView(tab === $('tab-demo') ? 'inside' : 'demo', true);
+    });
+  }
+}
+
 /** Build an element: h('div', {class: 'x', onclick: fn}, 'text', childNode, ...). Text is never parsed as HTML. */
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -145,7 +180,74 @@ const state = {
   batchRows: [],
   openStep: null,
   builderOpen: false,
+  builderFormat: 'hl7v2', // the format the built case is sent as: the base's, or a loaded file's
+  loaded: null, // {name, format, messages: [{label, text}]} from Load file, held only in this page
 };
+
+const caseLabel = (s) => s?.case?.message_type || (s?.case?.format === 'fhir' ? 'FHIR resource' : 'HL7 message');
+const errorLabel = (s) => s?.label || 'Failed message';
+const queueTime = (i) => {
+  const d = new Date(2026, 9, 17, 10, 21 - i * 3);
+  return d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+};
+
+function renderEvidence() {
+  if (!$('evidence-list')) return;
+  const scenarios = state.scenarios;
+  const selected = scenarios.find((s) => s.id === state.activeChip);
+  $('evidence-count').textContent = `(${scenarios.length})`;
+  fill($('evidence-list'), ...scenarios.slice(0, 9).map((s, i) => h('button', {
+    type: 'button', class: `queue-row${s === selected ? ' on' : ''}`, disabled: state.busy,
+    'aria-pressed': String(s === selected), onclick: () => runScenario(s),
+  }, h('span', { class: `queue-dot q${i % 3}` }),
+  h('span', { class: 'queue-copy' }, h('b', {}, caseLabel(s)), h('small', {}, s.case?.format === 'fhir' ? 'FHIR R4' : 'HL7 v2')),
+  h('span', { class: 'queue-side' }, h('time', {}, queueTime(i)), h('em', {}, errorLabel(s))))));
+
+  const k = kpis(state.batchRows);
+  const metric = (value, label, width) => h('div', { class: 'e-kpi' }, h('b', {}, value), h('span', {}, label), h('div', { class: 'e-meter' }, h('i', { style: `width:${width}%` })));
+  fill($('evidence-kpis'),
+    metric(k.total ? `${k.correct} / ${k.total}` : '—', 'Correct (batch)', k.total ? (k.correct / k.total) * 100 : 0),
+    metric(k.total ? pct(k.fastShare) : '—', 'Decided by fast tier', k.total ? k.fastShare * 100 : 0),
+    metric(k.total ? usd(k.costPerDecision) : '—', 'Cost per decision (batch)', k.total ? 54 : 0),
+    metric(k.total ? secs(k.medianMs) : '—', 'Median time per decision (batch)', k.total ? 72 : 0));
+
+  const d = state.current?.decision;
+  const c = state.current?.caseObj;
+  $('evidence-title').textContent = c ? caseLabel({ case: c }) : 'Select a failed message';
+  $('evidence-meta').textContent = c ? `${c.format === 'fhir' ? 'FHIR R4' : 'HL7 v2'}  |  Message ID: ${c.case_id || 'synthetic case'}` : 'Choose a case from the queue to see every decision step.';
+  $('evidence-issue').hidden = !selected;
+  $('evidence-issue').textContent = selected ? errorLabel(selected) : '';
+
+  const trace = d?.trace ?? [];
+  const fast = trace[0];
+  const agent = trace.find((s) => s.stage === 'Agent');
+  const policy = trace.find((s) => s.stage === 'Policy');
+  const agentUnavailable = agent?.value === 'unavailable';
+  const fastConfidence = Number(String(fast?.value ?? '').match(/\d+(?:\.\d+)?/)?.[0]) || 0;
+  $('fast-result').textContent = fast?.value || (state.thinking ? 'Analyzing…' : 'Waiting for a message');
+  $('fast-reason').textContent = fast?.detail || (state.thinking ? 'The fast tier is reading the failure.' : 'Select a failed message to begin.');
+  $('fast-time').textContent = fast ? secs(fast.ms || 0) : '—';
+  $('fast-confidence').textContent = fast ? fastConfidence.toFixed(2) : '—';
+  $('fast-meter').style.width = fast ? `${Math.round(fastConfidence * 100)}%` : '0';
+  $('agent-result').textContent = agentUnavailable ? 'Unavailable — safely escalated' : agent?.value || (d?.decidedBy === 'fast' ? 'Fast decision accepted' : state.thinking ? 'Gathering evidence…' : 'Waiting for evidence');
+  $('agent-conclusion').textContent = agentUnavailable ? 'The configured provider is temporarily unavailable. The fail-safe sent this case for human review.' : agent?.detail || d?.rationale || 'The agent’s tool-grounded conclusion appears here.';
+  $('agent-time').textContent = agent ? secs(agent.ms || 0) : '—';
+  const checks = trace.filter((s) => ![fast, agent, policy].includes(s) && s.stage !== 'Gate');
+  fill($('agent-checks'), ...(checks.length ? checks : trace.filter((s) => s.stage === 'Gate')).map((s) => h('li', {}, `${s.stage}: ${s.value}`)),
+    !trace.length ? h('li', {}, 'Select a message to inspect the agent trace.') : null);
+  $('policy-result').textContent = policy?.value || 'No decision yet.';
+  $('policy-detail').textContent = policy?.detail || 'The deterministic policy runs after model verification.';
+  $('policy-badge').hidden = !d;
+  $('policy-badge').textContent = d ? (d.autoApplied ? 'Auto-applied safely' : 'Human review required') : '';
+  $('canvas-outcome').textContent = d ? (d.autoApplied ? `${actionLabel(d.action)} applied.` : `${actionLabel(d.action)} proposed.`) : 'Nothing to act on yet.';
+  $('canvas-outcome-detail').textContent = d?.proposedFix || 'No downstream system has received a message.';
+  fill($('evidence-events'), ...(trace.length ? trace : [{ stage: 'Ready', value: 'Select a failed message', detail: 'Every model, tool, policy, and human action will appear here.' }]).map((s) => {
+    const detail = s.stage === 'Agent' && s.value === 'unavailable'
+      ? 'Provider unavailable; fail-safe escalation recorded.' : s.detail || s.value;
+    return h('li', {}, h('span', { class: 'audit-dot' }), h('time', {}, state.current ? clock(state.current.arrived) : '—'),
+      h('div', {}, h('b', {}, s.stage), h('p', {}, detail)));
+  }));
+}
 
 /* ---------- Mode label ---------- */
 
@@ -200,7 +302,8 @@ function drawWires() {
   const svg = $('wire-in');
   if (getComputedStyle(svg).display === 'none') return;
   const box = svg.getBoundingClientRect();
-  const scr = document.querySelector('.scr').getBoundingClientRect();
+  // Aim at whichever panel is showing: the builder hides the screen, whose box is then empty.
+  const scr = (state.builderOpen ? $('builder') : document.querySelector('.scr')).getBoundingClientRect();
   const ty = Math.min(Math.max(scr.top + scr.height / 2 - box.top, 0), box.height);
   svg.setAttribute('viewBox', `0 0 44 ${Math.max(box.height, 1)}`);
   const paths = [...document.querySelectorAll('#chips .chip:not(.more)')].map((chip) => {
@@ -268,17 +371,56 @@ function renderKnobs() {
     knob.title = list.length < 2
       ? (state.src?.mode === 'live' ? `Only ${m?.[tier] ?? 'the mock'} is configured` : 'A replay cannot switch models')
       : `Switch the ${tier === 'fast' ? 'fast tier' : 'agent'} model (${list.join(', ')})`;
+    // The Evidence Canvas has its own pair of buttons for the same menus.
+    const twin = $(`evidence-${tier}`);
+    twin.querySelector('.name').textContent = m?.[tier] ?? '…';
+    twin.disabled = knob.disabled;
+    twin.title = knob.title;
   }
   $('knob-note').textContent = state.src?.mode === 'live' ? ''
     : state.src?.noRecordings ? 'Mock models in your browser' : 'Models the run was recorded with';
 }
 
-async function cycleModel(tier) {
+/** Open (or close) the model menu under a knob, or under its twin on the Evidence Canvas. */
+function toggleModelMenu(tier, anchor = $(`knob-${tier}`)) {
+  const was = $('model-menu')?.dataset.anchor;
+  closeModelMenu();
+  if (was === anchor.id) return;
   const m = state.models;
   const list = m?.available?.[tier] ?? [];
   if (list.length < 2 || state.busy) return;
-  const next = list[(list.indexOf(m[tier]) + 1) % list.length];
-  const want = { fast: m.fast, agent: m.agent, [tier]: next };
+  const knob = anchor;
+  const items = list.map((name) => h('button', {
+    type: 'button', role: 'menuitemradio', class: `opt${name === m[tier] ? ' on' : ''}`,
+    'aria-checked': String(name === m[tier]),
+    onclick: () => { closeModelMenu(); if (name !== m[tier]) setModel(tier, name); },
+  }, name));
+  // Configured models without a key: listed, greyed out, with the variable to set on the server.
+  for (const { label, need } of m?.unavailable?.[tier] ?? []) {
+    items.push(h('button', { type: 'button', role: 'menuitemradio', class: 'opt', disabled: '',
+      'aria-disabled': 'true', title: `Add ${need} to .env and restart` }, label, h('small', {}, 'no key')));
+  }
+  const menu = h('div', { class: 'model-menu', id: 'model-menu', role: 'menu', 'data-tier': tier, 'data-anchor': anchor.id,
+    'aria-label': tier === 'fast' ? 'Fast tier model' : 'Agent model' }, ...items);
+  knob.parentElement.append(menu);
+  menu.style.left = `${knob.offsetLeft}px`;
+  menu.style.top = `${knob.offsetTop + knob.offsetHeight + 6}px`;
+  menu.style.minWidth = `${knob.offsetWidth}px`;
+  knob.setAttribute('aria-expanded', 'true');
+  (menu.querySelector('.on') ?? items[0]).focus();
+}
+
+function closeModelMenu() {
+  $('model-menu')?.remove();
+  for (const tier of ['fast', 'agent']) {
+    for (const id of [`knob-${tier}`, `evidence-${tier}`]) $(id)?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+async function setModel(tier, name) {
+  const m = state.models;
+  if (state.busy) return;
+  const want = { fast: m.fast, agent: m.agent, [tier]: name };
   try {
     state.models = await state.src.setModels(want.fast, want.agent);
     $('knob-note').textContent = '';
@@ -433,6 +575,7 @@ function renderKpis() {
     tile(none ? '—' : usd(k.costPerDecision), 'Cost per decision'),
     tile(none ? '—' : secs(k.medianMs), 'Median time per decision'),
   );
+  renderEvidence();
 }
 
 function appendBatchRow(row) {
@@ -459,6 +602,7 @@ function renderAll() {
   renderDecision();
   renderOutcome();
   renderAudit();
+  renderEvidence();
 }
 
 function setBusy(busy) {
@@ -504,6 +648,7 @@ async function runScenario(s) {
   if (state.busy) return;
   if (state.builderOpen) closeBuilder(false);
   state.activeChip = s.id;
+  $('batch-note').textContent = '';
   setBusy(true);
   try {
     await triage(s.case);
@@ -548,12 +693,19 @@ function builderBase() {
   return state.scenarios.find((s) => s.id === id) ?? state.scenarios[0];
 }
 
-/** Fill the form's fields from a scenario's case (the dropdown picks one). */
+function setFormat(format) {
+  state.builderFormat = format;
+  $('b-fmt').textContent = format === 'fhir' ? 'FHIR (JSON)' : 'HL7 v2';
+}
+
+/** Fill the form's fields from a scenario's case (the dropdown picks one). A loaded file keeps its message. */
 function loadBase(id) {
   const c = (state.scenarios.find((s) => s.id === id) ?? state.scenarios[0]).case;
   const ep = c.context?.endpoint ?? {};
-  $('b-fmt').textContent = c.format === 'fhir' ? 'FHIR (JSON)' : 'HL7 v2';
-  $('b-msg').value = messageToText(c.raw_message, c.format);
+  if (!state.loaded) {
+    setFormat(c.format);
+    $('b-msg').value = messageToText(c.raw_message, c.format);
+  }
   $('b-err').value = c.error_text ?? '';
   $('b-down').checked = ep.up === false;
   $('b-min').value = String(Number(ep.down_minutes) || 0);
@@ -564,10 +716,16 @@ function openBuilder() {
   const base = builderBase();
   const form = $('builder');
   state.builderOpen = true;
+  state.loaded = null;
   form.replaceChildren(
     h('h3', {}, 'Build your own failed message'),
     field('Start from', h('select', { id: 'b-base', 'data-key': 'b-base', onchange: (e) => loadBase(e.target.value) },
       ...state.scenarios.map((s) => h('option', { value: s.id, selected: s.id === base.id }, s.label))), 'b-base'),
+    field('Or load a file (.hl7, .txt, .json): read in your browser, sent only when you run it',
+      h('input', { id: 'b-file', 'data-key': 'b-file', type: 'file', accept: '.hl7,.hl7v2,.txt,.json,.fhir,text/plain,application/json', onchange: loadFile }), 'b-file'),
+    h('p', { class: 'bf-note', id: 'b-file-note', 'aria-live': 'polite' }),
+    h('div', { class: 'bf-pick', id: 'b-pick-row', hidden: true },
+      field('Message in the file', h('select', { id: 'b-pick', 'data-key': 'b-pick', onchange: (e) => pickLoaded(Number(e.target.value)) }), 'b-pick')),
     h('p', { class: 'bf-fmt' }, 'Format: ', h('b', { id: 'b-fmt' })),
     field('Message (one HL7 segment per line)', h('textarea', { id: 'b-msg', 'data-key': 'b-msg', rows: '7', spellcheck: 'false' }), 'b-msg'),
     field('Error text', h('input', { id: 'b-err', 'data-key': 'b-err', type: 'text' }), 'b-err'),
@@ -577,6 +735,7 @@ function openBuilder() {
     h('p', { class: 'err', id: 'b-errors', role: 'alert' }),
     h('div', { class: 'act' },
       h('button', { type: 'submit', class: 'pri', 'data-key': 'b-run' }, 'Run'),
+      h('button', { type: 'button', id: 'b-run-all', 'data-key': 'b-run-all', hidden: true, onclick: runLoaded }, 'Run all'),
       h('button', { type: 'button', 'data-key': 'b-cancel', onclick: closeBuilder }, 'Cancel')));
   loadBase(base.id);
   form.hidden = false;
@@ -594,23 +753,115 @@ function closeBuilder(refocus = true) {
   requestAnimationFrame(drawWires);
 }
 
-async function runBuilt(ev) {
-  ev.preventDefault();
-  if (state.busy) return;
+/** Read a file in the browser (nothing is uploaded) and put its message, or its first one, in the form. */
+async function loadFile(ev) {
+  const input = ev.target;
+  const file = input.files?.[0];
+  const note = (text) => { $('b-file-note').textContent = text; };
+  $('b-errors').textContent = '';
+  state.loaded = null;
+  showLoaded();
+  if (!file) return note('');
+  if (file.size > MAX_FILE_BYTES) {
+    input.value = '';
+    return note(`${file.name} is over ${MAX_FILE_BYTES / 1024 / 1024} MB: load a smaller file.`);
+  }
+  let text;
+  try {
+    text = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsText(file);
+    });
+  } catch {
+    return note(`Could not read ${file.name}.`);
+  }
+  if ($('b-file') !== input) return; // the panel was closed or rebuilt while reading
+  const parsed = parseLoadedFile(text);
+  if (parsed.error) {
+    input.value = '';
+    return note(`${file.name}: ${parsed.error}`);
+  }
+  state.loaded = { name: file.name, format: parsed.format, messages: parsed.messages };
+  setFormat(parsed.format);
+  showLoaded();
+  pickLoaded(0);
+  const n = parsed.messages.length;
+  note(n > 1 ? `${file.name}: ${n} messages. Pick one to run, or run them all one after another.` : `Loaded ${file.name}.`);
+}
+
+/** Show the message picker and Run all only when the loaded file holds several messages. */
+function showLoaded() {
+  const msgs = state.loaded?.messages ?? [];
+  $('b-pick-row').hidden = msgs.length < 2;
+  $('b-run-all').hidden = msgs.length < 2;
+  $('b-run-all').textContent = `Run all ${msgs.length}`;
+  $('b-pick').replaceChildren(...msgs.map((m, i) => h('option', { value: String(i) }, m.label)));
+}
+
+function pickLoaded(i) {
+  $('b-pick').value = String(i);
+  $('b-msg').value = state.loaded.messages[i].text;
+}
+
+/** A case from the panel's edits, with the message given (the textarea's by default). */
+function builtFrom(message = $('b-msg').value) {
   const base = state.scenarios.find((s) => s.id === $('b-base').value) ?? state.scenarios[0];
   const c = buildCase(base.case, {
-    format: base.case.format,
-    message: $('b-msg').value,
+    format: state.builderFormat,
+    message,
     errorText: $('b-err').value,
     up: !$('b-down').checked,
     downMinutes: $('b-min').value,
   });
+  return { base, c };
+}
+
+/** Triage every message of the loaded file, one after another, with the panel's error text and endpoint. */
+async function runLoaded() {
+  if (state.busy || !state.loaded) return;
+  const { name, messages } = state.loaded;
+  const cases = messages.map((m, i) => {
+    const { c } = builtFrom(m.text);
+    c.case_id = `${c.case_id}-${i + 1}`; // built in the same millisecond: keep the ids apart
+    return c;
+  });
+  const problems = cases.flatMap((c, i) => validateCase(c).map((p) => `Message ${i + 1}: ${p}`));
+  $('b-errors').textContent = problems.join(' ');
+  if (problems.length) return; // nothing is sent
+  closeBuilder();
+  state.activeChip = BUILD;
+  setBusy(true);
+  const counts = new Map();
+  let failed = 0;
+  let lastError = '';
+  try {
+    for (const [i, c] of cases.entries()) {
+      $('batch-note').textContent = `${name}: message ${i + 1} of ${cases.length}…`;
+      const decision = await triage(c);
+      if (decision) counts.set(decision.action, (counts.get(decision.action) ?? 0) + 1);
+      else { failed += 1; lastError = state.triageError; }
+    }
+    const done = [...counts].map(([a, n]) => `${n} ${actionLabel(a)}`).join(', ');
+    $('batch-note').textContent = `${name}: ${cases.length - failed} of ${cases.length} triaged${done ? ` (${done})` : ''}.`
+      + `${failed ? ` ${failed} failed: ${lastError}` : ''} The last one is on screen.`;
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runBuilt(ev) {
+  ev.preventDefault();
+  if (state.busy) return;
+  const { base, c } = builtFrom();
   const problems = validateCase(c);
   $('b-errors').textContent = problems.join(' ');
   if (problems.length) return; // nothing is sent
-  const typed = { base: base.id, msg: $('b-msg').value, err: $('b-err').value, down: $('b-down').checked, min: $('b-min').value };
+  const typed = { base: base.id, fmt: state.builderFormat, msg: $('b-msg').value, err: $('b-err').value, down: $('b-down').checked, min: $('b-min').value };
   closeBuilder(); // focus moves to the build chip and stays there across the busy re-render
   state.activeChip = BUILD;
+  $('batch-note').textContent = '';
   setBusy(true);
   let refused = '';
   try {
@@ -626,6 +877,7 @@ async function runBuilt(ev) {
     openBuilder();
     $('b-base').value = typed.base;
     loadBase(typed.base);
+    setFormat(typed.fmt);
     $('b-msg').value = typed.msg;
     $('b-err').value = typed.err;
     $('b-down').checked = typed.down;
@@ -646,6 +898,10 @@ function describeSource(src) {
 }
 
 async function boot() {
+  setupViews();
+  $('header-time').textContent = new Intl.DateTimeFormat('en', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(new Date());
   const src = await detectSource();
   state.src = src;
   try {
@@ -666,9 +922,21 @@ async function boot() {
   $('batch-btn').addEventListener('click', runBatch);
   $('builder').addEventListener('submit', runBuilt);
   $('builder').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBuilder(); });
-  $('knob-fast').addEventListener('click', () => cycleModel('fast'));
-  $('knob-agent').addEventListener('click', () => cycleModel('agent'));
+  $('knob-fast').addEventListener('click', () => toggleModelMenu('fast'));
+  $('knob-agent').addEventListener('click', () => toggleModelMenu('agent'));
+  // The model menu closes on Escape or a click anywhere outside it and its knob.
+  document.addEventListener('click', (e) => {
+    if ($('model-menu') && !e.target.closest('#model-menu, .knob, .canvas-controls .model')) closeModelMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !$('model-menu')) return;
+    const anchor = $('model-menu').dataset.anchor;
+    closeModelMenu();
+    $(anchor)?.focus();
+  });
   window.addEventListener('resize', () => requestAnimationFrame(drawWires));
+  // The device changes height when the builder opens or its message box is resized.
+  if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(drawWires)).observe(document.querySelector('.device'));
   // A pending focus restore is dropped as soon as the person moves focus or clicks elsewhere.
   document.addEventListener('pointerdown', () => { pendingFocus = null; });
   document.addEventListener('focusin', (e) => { if (e.target.dataset?.key !== pendingFocus) pendingFocus = null; });

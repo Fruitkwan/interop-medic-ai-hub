@@ -182,6 +182,17 @@ OpenAI-compatible API works under a name AI Hub does not know, with `<NAME>_BASE
 `INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/` and `INCEPTION_API_KEY`. The container reads
 every `.env` variable, so new keys need no change to `docker-compose.yml`.
 
+Models listed without a key still appear on the page, greyed out, with the variable to add.
+
+The fast tier can also run a fast chat model, such as Inception's Mercury, through
+`Medic.Provider.ChatFast`: one JSON-mode call to an OpenAI-compatible `chat/completions` endpoint
+asks the same three questions as System One, with the same wrong-patient guardrail. List them in
+`MEDIC_FAST_MODELS`, in the same format and with the same keys:
+
+```bash
+MEDIC_FAST_MODELS=Mercury 2.5=inception:mercury-2.5
+```
+
 The switch sends only the label; it sets `LLMProvider`, `LLMModel`, `LLMBaseURL` and `LLMCredentials`
 (the credentials name, never the key) on `Medic.Agent`. Without `MEDIC_AGENT_MODELS` the switch
 offers the one `AIHUB_PROVIDER` / `AIHUB_MODEL` model. Cost tracking uses one
@@ -231,10 +242,11 @@ Ollama serves both tiers on your own machine, with no API keys:
 ```
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_FAST_MODEL=nimble-v3      # default
-OLLAMA_AGENT_MODEL=gemma4        # default; qwen3.8 (27B) needs a GPU: on a CPU it outlasts AI Hub's request timeout
+OLLAMA_AGENT_MODEL=gemma4        # optional (agent); qwen3.8 (27B) needs a GPU: on a CPU it outlasts AI Hub's request timeout
 ```
 
-Each tier's model switch on the web page then offers "Ollama". On a CPU-only machine a call can take minutes. The fast tier waits up to `OLLAMA_TIMEOUT` seconds (default 600), and the image raises the web gateway's response timeout to 900 s. The same values can be set by hand on `Medic.Agent` (LLMProvider `openai`, LLMModel, LLMBaseURL `http://host.docker.internal:11434/v1/`). Hosted providers that need a key (`openai`, `anthropic`, `xai`, ...) go through `MEDIC_AGENT_MODELS` (see "Choosing the agent's model") or `AIHUB_PROVIDER`, `AIHUB_MODEL` and `AIHUB_API_KEY`.
+The fast tier's model switch then offers the model by name ("Nimble v3"); the agent's offers its
+model only when `OLLAMA_AGENT_MODEL` is set. On a CPU-only machine a call can take minutes. The fast tier waits up to `OLLAMA_TIMEOUT` seconds (default 600), and the image raises the web gateway's response timeout to 900 s. The same values can be set by hand on `Medic.Agent` (LLMProvider `openai`, LLMModel, LLMBaseURL `http://host.docker.internal:11434/v1/`). Hosted providers that need a key (`openai`, `anthropic`, `xai`, ...) go through `MEDIC_AGENT_MODELS` (see "Choosing the agent's model") or `AIHUB_PROVIDER`, `AIHUB_MODEL` and `AIHUB_API_KEY`.
 
 ### Web page and REST API
 
