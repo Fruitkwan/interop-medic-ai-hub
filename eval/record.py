@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -30,12 +32,35 @@ def _call(opener, base: str, method: str, path: str, body=None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+class PartialRecording(Exception):
+    """The run skipped items or fell short of the bundle schema; `out` was left untouched."""
+
+    def __init__(self, message: str, partial: Path):
+        super().__init__(message)
+        self.partial = partial
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Write via a temp file in the same directory, then replace, so a crash never leaves half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 def _unavailable(decision: dict) -> bool:
     return any(s.get("stage") == "Agent" and s.get("value") == "unavailable" for s in decision.get("trace", []))
 
 
 def record(base_url: str, batches: int, out: Path, opener=urllib.request.urlopen,
-           fast: str = "Jev", agent: str = "Gemini", sleep=time.sleep, log=print) -> dict:
+           fast: str = "Jev", agent: str = "Gemini", sleep=time.sleep, log=print,
+           allow_partial: bool = False) -> dict:
     """Record to `out` and return the bundle: {recordedAt, build, models, scenarios, batches}."""
     base = base_url.rstrip("/")
     api = lambda method, path, body=None: _call(opener, base, method, path, body)  # noqa: E731
@@ -86,11 +111,19 @@ def record(base_url: str, batches: int, out: Path, opener=urllib.request.urlopen
     finally:
         api("POST", "/models", previous)
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(bundle, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    log(f"recorded {len(bundle['scenarios'])} scenarios and {sum(len(b) for b in bundle['batches'])} batch cases, "
-        f"skipped {skipped}, models {bundle['models']} -> {out}")
-    return bundle
+    text = json.dumps(bundle, ensure_ascii=False, separators=(",", ":"))
+    n_cases = sum(len(b) for b in bundle["batches"])
+    log(f"recorded {len(bundle['scenarios'])} scenarios and {n_cases} batch cases, "
+        f"skipped {skipped}, models {bundle['models']}")
+    complete = (skipped == 0 and bundle["scenarios"] and len(bundle["batches"]) == batches
+                and all(len(b) == 5 for b in bundle["batches"]))
+    if complete or allow_partial:
+        _write_atomic(out, text)
+        log(f"wrote {out}")
+        return bundle
+    partial = out.with_suffix(".partial.json")
+    _write_atomic(partial, text)
+    raise PartialRecording(f"incomplete run ({skipped} skipped); {out} left untouched, partial run in {partial}", partial)
 
 
 def main() -> None:
@@ -100,9 +133,13 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=Path("web/data/bundle.json"))
     p.add_argument("--fast", default="Jev")
     p.add_argument("--agent", default="Gemini")
+    p.add_argument("--allow-partial", action="store_true", help="write the bundle even if cases were skipped")
     args = p.parse_args()
-    record(args.base, args.batches, args.out, fast=args.fast, agent=args.agent,
-           log=lambda m: print(m, flush=True))
+    try:
+        record(args.base, args.batches, args.out, fast=args.fast, agent=args.agent,
+               log=lambda m: print(m, flush=True), allow_partial=args.allow_partial)
+    except PartialRecording as e:
+        sys.exit(f"ERROR: {e}")
 
 
 if __name__ == "__main__":

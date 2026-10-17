@@ -131,11 +131,34 @@ class RecordTest(unittest.TestCase):
 
     def test_persistent_unavailable_is_skipped_not_written(self):
         api = FakeApi(always_down={"s1-case"})
-        bundle, sleeps = self.run_record(api, batches=0)
+        bundle, sleeps = self.run_record(api, batches=0, allow_partial=True)
         self.assertEqual(api.triaged.count("s1-case"), 3)
         self.assertEqual(sleeps, [20, 20])
         self.assertEqual([s["id"] for s in bundle["scenarios"]], ["s0", "s2"])
         self.assertNotIn("unavailable", json.dumps(bundle))
+
+    def test_incomplete_run_leaves_existing_bundle_untouched(self):
+        api = FakeApi(always_down={"s1-case"})
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "bundle.json"
+            out.write_bytes(b'{"good":"bundle"}')
+            with self.assertRaises(record.PartialRecording):
+                record.record("http://x/medic/api", 1, out, opener=api, sleep=lambda s: None, log=lambda m: None)
+            self.assertEqual(out.read_bytes(), b'{"good":"bundle"}')
+            partial = json.loads((Path(tmp) / "bundle.partial.json").read_text(encoding="utf-8"))
+            self.assertEqual([s["id"] for s in partial["scenarios"]], ["s0", "s2"])
+            self.assertEqual([p.name for p in Path(tmp).iterdir() if p.name.endswith(".tmp")], [])
+        self.assertEqual(api.models, {"fast": "Mock", "agent": "Mock"})
+
+    def test_empty_run_is_partial(self):
+        class Dead(FakeApi):
+            def __init__(self):
+                super().__init__(always_down={"s0-case", "s1-case", "s2-case"})
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "bundle.json"
+            with self.assertRaises(record.PartialRecording):
+                record.record("http://x/medic/api", 0, out, opener=Dead(), sleep=lambda s: None, log=lambda m: None)
+            self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

@@ -9,3 +9,4 @@ data/results/
 data/csv/
 .env
 .superpowers/
+web/data/*.partial.json
