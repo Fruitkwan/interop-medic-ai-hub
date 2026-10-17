@@ -30,7 +30,7 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		set response = agent.Chat(session, ..Prompt(pReq, pHint))
 		set it = trace.Calls.%GetIterator()
 		while it.%GetNext(, .call) {
-			do pDecision.AddStep(call.tool, $select(call.ok: "ok", 1: "bad"), call.summary, call.arguments, call.ms)
+			do pDecision.AddStep(call.tool, $select(call.ok: "ok", 1: "bad"), ..ToolValue(call.tool, call.summary), call.summary, call.ms)
 		}
 		$$$ThrowOnError(..ParseDecision(response.Content, pDecision))
 		set tools = trace.Summary()
@@ -44,6 +44,32 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		do pDecision.AddStep("Agent", "bad", "unavailable", why)
 	}
 	quit $$$OK
+}
+
+/// A short human value for a tool-call trace step, from the tool's raw (escaped, possibly
+/// truncated) audit JSON. The raw text stays in the step's detail.
+ClassMethod ToolValue(pTool As %String, pSummary As %String) As %String
+{
+	// The result is JSON inside JSON inside JSON: dropping every backslash leaves the plain
+	// "key":value text, which is all the patterns below need.
+	set text = $replace(pSummary, "\", ""), val = ""
+	if pTool = "SearchPrecedents" {
+		if $locate(text, """caseId""\s*:\s*""[^""]+", 1, , val) quit "precedent "_$piece(val, """", 4)
+		quit "none"
+	}
+	if pTool = "ValidateHL7" {
+		if $locate(text, """valid""\s*:\s*(true|false)", 1, , val) quit $select(val [ "true": "valid", 1: "invalid")
+	}
+	if pTool = "CheckEndpoint" {
+		if $locate(text, """queueDepth""\s*:\s*""?\d*", 1, , val) quit "queue "_+$translate($piece(val, ":", 2), """ ")
+	}
+	// Anything else: keep the result part, drop JSON punctuation and a leading "key:".
+	if text [ "result_json"":" set text = $piece(text, "result_json"":", 2, *)
+	set text = $piece(text, ",""display_text", 1)
+	set clean = $zstrip($translate(text, "{}[]"""), "<>W")
+	if $locate(clean, "^\w+:", 1, , val) set clean = $zstrip($extract(clean, $length(val) + 1, *), "<W")
+	if (pTool = "GetRoutingRule") || (pTool = "ClosestRoute") quit $select(clean = "": "no match", 1: clean)
+	quit $extract(clean, 1, 40)
 }
 
 /// The user turn: error first, then context, the fast tier's verdict and the message itself.

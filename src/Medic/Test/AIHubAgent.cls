@@ -52,6 +52,29 @@ Method TestPromptIncludesHint()
 	do $$$AssertTrue(text [ "PID|1||12345678")
 }
 
+Method TestToolValueIsReadable()
+{
+	set cls = "Medic.Provider.AIHubAgent"
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "SearchPrecedents", "[{""caseId"":""c-17"",""action"":""resend""},{""caseId"":""c-9""}]"), "precedent c-17")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "SearchPrecedents", "[{\""caseId\"":\""c-17\"",\""action\"":\""re"), "precedent c-17", "truncated and escaped")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "SearchPrecedents", "[]"), "none")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "ValidateHL7", "{""valid"":true,""docType"":""ORU_R01""}"), "valid")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "ValidateHL7", "{""valid"":false,""error"":""x""}"), "invalid")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "CheckEndpoint", "{\""name\"":\""Medic.To.EPR\"",\""queueDepth\"":12}"), "queue 12")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "GetRoutingRule", "Medic.To.EPR"), "Medic.To.EPR")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "ClosestRoute", "{""result"":""Medic.To.EPR""}"), "Medic.To.EPR")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "ClosestRoute", ""), "no match")
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "GetRoutingRule", "{""result"":""""}"), "no match")
+	// The real AI Hub audit shape: tool_name + result_json, JSON escaped two or three levels deep.
+	set bs = $char(92)
+	set real = "{"_$char(34)_"tool_name"_$char(34)_":"_$char(34)_"CheckEndpoint"_$char(34)_","_$char(34)_"result_json"_$char(34)_":"_$char(34)_bs_$char(34)_"{"_bs_bs_bs_$char(34)_"name"_bs_bs_bs_$char(34)_":"_bs_bs_bs_$char(34)_"Medic.To.EPR"_bs_bs_bs_$char(34)_","_bs_bs_bs_$char(34)_"queueDepth"_bs_bs_bs_$char(34)_":7}"_bs_$char(34)_$char(34)_"}"
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "CheckEndpoint", real), "queue 7", "real escaped shape")
+	set real = "{"_$char(34)_"tool_name"_$char(34)_":"_$char(34)_"ClosestRoute"_$char(34)_","_$char(34)_"result_json"_$char(34)_":"_$char(34)_bs_$char(34)_"Medic.To.EPR"_bs_$char(34)_$char(34)_","_$char(34)_"display_text"_$char(34)_":null}"
+	do $$$AssertEquals($classmethod(cls, "ToolValue", "ClosestRoute", real), "Medic.To.EPR", "real routing shape")
+	set v = $classmethod(cls, "ToolValue", "Other", "{\""a\"":\""some long text that goes on and on and on past forty chars\""}")
+	do $$$AssertTrue(($length(v) <= 40) && (v '[ "{") && (v '[ "\") && (v '[ """"), "fallback is short and clean: "_v)
+}
+
 Method TestFailsSafeWithoutAIHub()
 {
 	quit:##class(%Dictionary.CompiledClass).%ExistsId("Medic.AIHub.TriageAgent")
