@@ -24,7 +24,10 @@ export function stepRows(trace) {
  * @param {{action:string, trace:Array}} decision
  */
 export function overruled(decision) {
-  const first = decision?.trace?.[0];
+  const trace = decision?.trace ?? [];
+  // A failed agent run ("unavailable") overruled nothing.
+  if (trace.some((s) => s.stage === 'Agent' && s.value === 'unavailable')) return false;
+  const first = trace[0];
   const word = String(first?.value ?? '').trim().split(/\s+/)[0];
   return Boolean(word) && word !== decision.action;
 }
@@ -149,8 +152,15 @@ const state = {
 function modeLabel() {
   if (state.src.mode === 'live') return 'Live';
   const d = state.current?.decision;
-  if (d) return d.source === 'replay' ? 'Replay of a real run' : 'Mock';
-  return state.src.noRecordings ? 'Mock' : 'Replay of a real run';
+  const label = replayLabel(state.models);
+  if (d) return d.source === 'replay' ? label : 'Mock';
+  return state.src.noRecordings ? 'Mock' : label;
+}
+
+/** "Replay (mock models)" when the bundle was recorded on the mocks, else "Replay of a real run". */
+export function replayLabel(models) {
+  const mock = (m) => String(m ?? '').toLowerCase() === 'mock';
+  return models && mock(models.fast) && mock(models.agent) ? 'Replay (mock models)' : 'Replay of a real run';
 }
 
 /* ---------- Zone: chips + wires ---------- */
