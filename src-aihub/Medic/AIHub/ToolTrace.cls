@@ -14,10 +14,11 @@ Method %OnNew() As %Status
 /// Build 154 requires these exact argument types and a %Status return (the EAP docs show neither).
 Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result As %DynamicObject, duration As %Integer, status As %Status) As %Status
 {
+	set call = $get(call), result = $get(result), status = $get(status, 1)
 	set name = $select($isobject(call): call.name, 1: "?")
 	set args = $select($isobject(call) && $isobject(call.arguments): call.arguments.%ToJSON(), 1: "")
 	set summary = $extract($select($isobject(result): result.%ToJSON(), 1: result), 1, 160)
-	do ..Calls.%Push({"tool": (name), "arguments": (args), "summary": (summary), "ms": (+duration), "ok": ($$$ISOK(status))})
+	do ..Calls.%Push({"tool": (name), "arguments": (args), "summary": (summary), "ms": (+$get(duration)), "ok": ($$$ISOK(status))})
 	quit $$$OK
 }
 

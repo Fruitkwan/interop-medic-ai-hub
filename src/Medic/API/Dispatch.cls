@@ -147,10 +147,21 @@ ClassMethod Throw400(pText As %String) [ Private ]
 	throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, ..#BADREQUEST_pText))
 }
 
+/// POSTs must be application/json: a cross-site form or text/plain POST is refused before it reaches a route.
+ClassMethod OnPreDispatch(pUrl As %String, pMethod As %String, ByRef pContinue As %Boolean) As %Status
+{
+	if pMethod = "POST", $zconvert($piece(%request.ContentType, ";"), "L") '= "application/json" {
+		set %response.Status = "415 Unsupported Media Type"
+		write {"error": "Content-Type must be application/json"}.%ToJSON()
+		set pContinue = 0
+	}
+	quit $$$OK
+}
+
 /// Map an exception to an HTTP status and an {"error"} body.
 ClassMethod Fail(ex As %Exception.AbstractException) [ Private ]
 {
-	set text = ex.DisplayString()
+	set text = $system.Status.GetOneErrorText(ex.AsStatus())
 	set status = $select(text [ "already decided by a person": 409,
 		(text [ "reroute needs a target") || (text [ "unknown action") || (text [ "unknown model")
 			|| (text [ ..#BADREQUEST): 400,
