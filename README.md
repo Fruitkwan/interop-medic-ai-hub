@@ -10,8 +10,9 @@
   **Run a batch of 5**, and finally **+ Build your own** to write a message of your own.
 - **The labels:**
   - **Live** means the page is talking to the running IRIS production.
-  - **Replay of a real run** means it is replaying a recorded bundle (`web/data/bundle.json`), as on
-    the public site.
+  - **Replay of a real run** means it is replaying a bundle (`web/data/bundle.json`) recorded with
+    real models, as on the public site; **Replay (mock models)** is the same for a bundle recorded
+    on the mocks.
   - **Mock** means the models are the offline mocks.
   - Downstream effects (resend, reroute and so on) are marked "(simulated)": nothing downstream exists.
 - **Real models:** Jev (fast tier) and Gemini via AI Hub (agent) need keys in `.env` and the AI Hub
@@ -41,8 +42,10 @@ For each errored or suspended message it decides one of **resend**, **fix and re
 proposed fix.
 
 > **Status:** this runs fully offline with mock providers. The fast tier can call Jev or Laya. The
-> AI Hub agent (`Medic.AIHub.TriageAgent`) is written, but it hasn't been run yet: it only compiles
-> on the AI Hub Early Access build.
+> AI Hub agent (`Medic.AIHub.TriageAgent`) only compiles on the AI Hub Early Access build (154). It
+> has run there on real Gemini: it escalated a critical result using ValidateHL7/CheckEndpoint and
+> SearchPrecedents. The full real-model recording is pending a Gemini quota reset; the bundled
+> recording uses the mock models.
 
 ## How it works
 
