@@ -26,7 +26,7 @@ ClassMethod Get() As %DynamicObject
 ClassMethod CurrentFast() As %String
 {
 	set provider = ##class(Medic.Operation.FastTier).Pick(..HostSetting(..#FASTITEM, "ProviderClass"), "MEDIC_FAST_PROVIDER", "Medic.Provider.JevMock")
-	if provider = "Medic.Provider.ChatFast" {
+	if (provider = "Medic.Provider.ChatFast") || (..HostSetting(..#FASTITEM, "KeyProvider") '= "") {
 		quit ..Label(..FastModels(), ..HostSetting(..#FASTITEM, "KeyProvider"), ..HostSetting(..#FASTITEM, "Model"))
 	}
 	quit:(provider '= "Medic.Provider.SystemOne") "Mock"
@@ -41,7 +41,9 @@ ClassMethod CurrentAgent() As %String
 {
 	set provider = ##class(Medic.Operation.FastTier).Pick(..HostSetting(..#AGENTITEM, "ProviderClass"), "MEDIC_AGENT_PROVIDER", "Medic.Provider.AgentMock")
 	quit:(provider '= "Medic.Provider.AIHubAgent") "Mock"
-	quit:((..Ollama() '= "") && (..HostSetting(..#AGENTITEM, "LLMBaseURL") = (..Ollama()_"/v1/"))) ..OllamaLabel("agent")
+	if (..OllamaLabel("agent") '= "") && (..HostSetting(..#AGENTITEM, "LLMProvider") = "openai") && (..HostSetting(..#AGENTITEM, "LLMBaseURL") = (..Ollama()_"/v1/")) {
+		quit ..OllamaLabel("agent")
+	}
 	set llm = ..HostSetting(..#AGENTITEM, "LLMProvider"), model = ..HostSetting(..#AGENTITEM, "LLMModel")
 	// Blank LLM settings mean the AIHUB_* environment.
 	if llm = "" set llm = ..Env("AIHUB_PROVIDER", "openai"), model = $system.Util.GetEnviron("AIHUB_MODEL")
@@ -63,6 +65,12 @@ ClassMethod Label(pModels As %DynamicArray, pProvider As %String, pModel As %Str
 ClassMethod FastModels() As %DynamicArray
 {
 	quit ..ParseModels($system.Util.GetEnviron("MEDIC_FAST_MODELS"), ",mock,jev,laya,")
+}
+
+/// True for a decision model (e.g. mercury-decide), which speaks the System One request format.
+ClassMethod IsDecide(pModel As %String) As %Boolean
+{
+	quit $zconvert(pModel, "L") [ "decide"
 }
 
 /// The OpenAI-compatible base URL for a chat model: <PROVIDER>_BASE_URL, else AI Hub's default for the provider.
@@ -96,7 +104,7 @@ ClassMethod Unavailable(pTier As %String) As %DynamicArray
 		continue:..Usable(pTier, m.provider)
 		set name = $translate($zconvert(m.provider, "U"), "-.", "__")
 		set known = $isobject(##class(Medic.Operation.Agent).ProviderInfo(m.provider))
-		set need = $select(known || (##class(Medic.Operation.Agent).BaseURL(m.provider) '= ""): name_"_API_KEY", 1: name_"_BASE_URL and "_name_"_API_KEY")
+		set need = $select(name = "OLLAMA": "OLLAMA_BASE_URL", known || (##class(Medic.Operation.Agent).BaseURL(m.provider) '= ""): name_"_API_KEY", 1: name_"_BASE_URL and "_name_"_API_KEY")
 		do out.%Push({"label": (m.label), "need": (need)})
 	}
 	quit out
@@ -197,7 +205,7 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 
 	kill fast, agent
 	// Local models on a CPU can take minutes per call; hosted ones get the usual 10 s.
-	set fast("TimeoutSeconds") = 10, fast("KeyProvider") = "", fast("Stage") = ""
+	set fast("TimeoutSeconds") = 10, fast("KeyProvider") = "", fast("Stage") = "", fast("Endpoint") = ""
 	if pFast = "Jev" {
 		set fast("ProviderClass") = "Medic.Provider.SystemOne"
 		set fast("BaseURL") = $system.Util.GetEnviron("SYSTEMONE_BASE_URL"), fast("Model") = $system.Util.GetEnviron("SYSTEMONE_MODEL")
@@ -209,11 +217,14 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 		set fast("BaseURL") = ..Ollama(), fast("Model") = ..Env("OLLAMA_FAST_MODEL", "nimble-v3")
 		set fast("TimeoutSeconds") = +..Env("OLLAMA_TIMEOUT", 600)
 	} elseif pFast '= "Mock" {
-		// A chat model: the operation reads the key itself (KeyProvider), as the agent does.
+		// A hosted model: the operation reads the key itself (KeyProvider), as the agent does.
+		// A decision model (id containing "decide", e.g. mercury-decide) takes the System One
+		// request at <base>decisions; any other model is a chat model (Medic.Provider.ChatFast).
 		set m = ..Entry(..FastModels(), pFast)
-		set fast("ProviderClass") = "Medic.Provider.ChatFast", fast("Stage") = pFast
+		set fast("ProviderClass") = $select(..IsDecide(m.model): "Medic.Provider.SystemOne", 1: "Medic.Provider.ChatFast")
+		set fast("Endpoint") = $select(..IsDecide(m.model): "decisions", 1: "")
 		set fast("BaseURL") = ..ChatURL(m.provider), fast("Model") = m.model, fast("KeyProvider") = m.provider
-		set fast("TimeoutSeconds") = 30
+		set fast("Stage") = pFast, fast("TimeoutSeconds") = 30
 	} else {
 		set fast("ProviderClass") = "Medic.Provider.JevMock", fast("BaseURL") = "", fast("Model") = ""
 	}

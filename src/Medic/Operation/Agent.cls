@@ -124,14 +124,21 @@ ClassMethod Credential(pProvider As %String) As %String
 /// OpenAI-compatible API) and a key for it is configured on the server.
 ClassMethod HasKey(pProvider As %String) As %Boolean
 {
+	// A local Ollama model needs no key, only OLLAMA_BASE_URL.
+	quit:($zconvert(pProvider, "L") = "ollama") ..BaseURL(pProvider) '= ""
 	quit:(('$isobject(..ProviderInfo(pProvider))) && (..BaseURL(pProvider) = "")) 0
 	quit ..APIKey(pProvider, ..Credential(pProvider)) '= ""
 }
 
 /// <PROVIDER>_BASE_URL, e.g. INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/, for a provider
-/// AI Hub does not know; blank for the others (they use AI Hub's own endpoint).
+/// AI Hub does not know (ollama: OLLAMA_BASE_URL/v1/); blank for the others (AI Hub's own endpoint).
 ClassMethod BaseURL(pProvider As %String) As %String
 {
+	if $zconvert(pProvider, "L") = "ollama" {
+		// Ollama's OpenAI-compatible API lives under /v1 of OLLAMA_BASE_URL.
+		set url = $system.Util.GetEnviron("OLLAMA_BASE_URL")
+		quit $select(url = "": "", $extract(url, *) = "/": url_"v1/", 1: url_"/v1/")
+	}
 	quit:$isobject(..ProviderInfo(pProvider)) ""
 	set url = $system.Util.GetEnviron($translate($zconvert(pProvider, "U"), "-.", "__")_"_BASE_URL")
 	quit $select((url = "") || ($extract(url, *) = "/"): url, 1: url_"/")

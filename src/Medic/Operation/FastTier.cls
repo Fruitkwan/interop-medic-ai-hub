@@ -29,10 +29,14 @@ Property PricePerMTokens As %String;
 /// credentials Medic.inception; see Medic.Operation.Agent.APIKey). Blank means Credentials / SYSTEMONE_API_KEY.
 Property KeyProvider As %String(MAXLEN = 64);
 
+/// Path of the System One call under BaseURL. Blank means v1/systemone; Mercury Decide uses
+/// decisions (BaseURL https://api.inceptionlabs.ai/v1/).
+Property Endpoint As %String(MAXLEN = 128);
+
 /// Name of this tier's step in the trace (e.g. Mercury 2.5). Blank means Mock, Jev, Ollama or Laya.
 Property Stage As %String(MAXLEN = 64);
 
-Parameter SETTINGS = "ProviderClass:Basic,BaseURL:SystemOne,Model:SystemOne,Credentials:SystemOne:credentialsSelector,TimeoutSeconds:SystemOne,PricePerMTokens:SystemOne,KeyProvider:SystemOne,Stage:Basic";
+Parameter SETTINGS = "ProviderClass:Basic,BaseURL:SystemOne,Model:SystemOne,Credentials:SystemOne:credentialsSelector,TimeoutSeconds:SystemOne,PricePerMTokens:SystemOne,KeyProvider:SystemOne,Endpoint:SystemOne,Stage:Basic";
 
 /// Resolved provider settings handed to Decide().
 Property Config As %DynamicObject [ Transient ];
@@ -49,6 +53,7 @@ Method OnInit() As %Status
 		"model": (..ModelId()),
 		"apiKey": ($select(..KeyProvider '= "": key, 1: ..Pick(key, "SYSTEMONE_API_KEY"))),
 		"timeout": (..TimeoutSeconds),
+		"endpoint": (..Endpoint),
 		"pricePerMTok": (+..Pick(..PricePerMTokens, "SYSTEMONE_PRICE_PER_MTOK", 0))
 	}
 	$$$LOGINFO("Fast tier provider "_..ProviderClass_$select(..Config.baseUrl '= "": " at "_..Config.baseUrl, 1: ""))

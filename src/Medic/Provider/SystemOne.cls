@@ -1,5 +1,6 @@
 /// Fast-tier provider for any server speaking the System One API (POST /v1/systemone):
-/// TypeSafe Jev (hosted), a hosted Laya API, or Laya run locally with laya-serve or ollaya.
+/// TypeSafe Jev (hosted), a hosted Laya API, Laya run locally with laya-serve or ollaya, or
+/// Inception's Mercury Decide (the same request at POST /v1/decisions; config "endpoint").
 /// One call asks three typed questions: the action (choice), severity (score) and identity risk (noul).
 /// Any failure (unreachable server, bad reply) becomes a zero-confidence escalate, so the full agent
 /// takes the case instead of the message erroring.
@@ -25,7 +26,14 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 
 		set path = $get(url("path"))
 		if $extract(path, *) = "/" set path = $extract(path, 1, *-1)
-		$$$ThrowOnError(http.Post(path_"/v1/systemone"))
+		set endpoint = $select(cfg.endpoint '= "": cfg.endpoint, 1: "v1/systemone")
+		$$$ThrowOnError(http.Post(path_"/"_endpoint, , 0))
+		// Rate limited: wait as asked (at most 5 s) and try once more, never in a loop.
+		if http.HttpResponse.StatusCode = 429 {
+			set wait = +http.HttpResponse.GetHeader("RETRY-AFTER")
+			hang $select((wait > 0) && (wait <= 5): wait, 1: 2)
+			$$$ThrowOnError(http.Post(path_"/"_endpoint))
+		}
 		set status = http.HttpResponse.StatusCode
 		if status '= 200 $$$ThrowStatus($$$ERROR($$$GeneralError, "HTTP "_status_": "_$extract(http.HttpResponse.Data.Read(300), 1, 300)))
 		do ..ApplyAnswers({}.%FromJSON(http.HttpResponse.Data), pDecision, cfg)

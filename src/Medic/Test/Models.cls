@@ -78,6 +78,19 @@ Method TestChatFastReply()
 	do $$$AssertTrue(req.messages.%Get(1).content [ "Error: ")
 }
 
+/// ollama:<model> entries need OLLAMA_BASE_URL and no key.
+Method TestOllamaEntriesNeedNoKey()
+{
+	set cls = "Medic.Operation.Agent", url = $system.Util.GetEnviron("OLLAMA_BASE_URL")
+	if url = "" {
+		do $$$AssertEquals($classmethod(cls, "BaseURL", "ollama"), "")
+		do $$$AssertNotTrue($classmethod(cls, "HasKey", "ollama"))
+	} else {
+		do $$$AssertEquals($extract($classmethod(cls, "BaseURL", "Ollama"), *-3, *), "/v1/")
+		do $$$AssertTrue($classmethod(cls, "HasKey", "ollama"))
+	}
+}
+
 Method TestRejectsUnknownAgent()
 {
 	set err = ""

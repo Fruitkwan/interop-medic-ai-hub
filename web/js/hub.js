@@ -224,6 +224,12 @@ function renderEvidence() {
   const policy = trace.find((s) => s.stage === 'Policy');
   const agentUnavailable = agent?.value === 'unavailable';
   const fastConfidence = Number(String(fast?.value ?? '').match(/\d+(?:\.\d+)?/)?.[0]) || 0;
+  const stages = $('panel-inside').querySelectorAll('.stage-line li');
+  const progress = [Boolean(selected), Boolean(fast), Boolean(d), Boolean(policy)];
+  stages.forEach((stage, i) => {
+    stage.classList.toggle('done', progress[i]);
+    stage.classList.toggle('current', progress[i] && !progress[i + 1]);
+  });
   $('fast-result').textContent = fast?.value || (state.thinking ? 'Analyzing…' : 'Waiting for a message');
   $('fast-reason').textContent = fast?.detail || (state.thinking ? 'The fast tier is reading the failure.' : 'Select a failed message to begin.');
   $('fast-time').textContent = fast ? secs(fast.ms || 0) : '—';
@@ -332,9 +338,19 @@ function renderScreen() {
 
   const steps = $('steps');
   if (state.thinking) {
-    fill(steps, h('div', { class: 'thinking', role: 'status' },
-      h('span', { class: 'pulse', 'aria-hidden': 'true' }),
-      'Agent thinking… ', h('b', {}, String(Math.floor((Date.now() - state.started) / 1000))), ' s'));
+    const glyphs = [
+      'MSH.9  ADT^A01   MSG 7A3C-2E6D',
+      'PID.3  HASH 91F0   ROUTE EHR-PROD',
+      'ACK.1  WAIT 30S   RETRY 02/03',
+      'IRIS.LOG  TRACE 6B8C  STATUS 200',
+      'POLICY  TRIAGE-V3.1  SCORE 0.92',
+    ];
+    fill(steps, h('div', { class: 'thinking-shell', role: 'status', 'aria-label': 'Agent is processing the message' },
+      h('div', { class: 'thinking' }, h('span', { class: 'pulse', 'aria-hidden': 'true' }),
+        h('span', {}, 'Tracing the message'), h('b', { id: 'thinking-seconds' }, String(Math.floor((Date.now() - state.started) / 1000))), ' s'),
+      h('div', { class: 'glyph-draw', 'aria-hidden': 'true' },
+        ...glyphs.map((line, i) => h('span', { class: `glyph-line glyph-line-${i + 1}` }, line))),
+      h('p', { class: 'thinking-note' }, 'Reading segments · checking IRIS · applying policy')));
   } else if (state.triageError) {
     fill(steps, h('div', { class: 'step-error' }, `Triage failed: ${state.triageError}`));
   } else if (!d) {
@@ -359,6 +375,15 @@ function renderScreen() {
     fill(drawer, h('b', {}, `${open.stage}: `), open.detail || '(no detail)',
       open.ms > 0 ? h('span', { class: 'ms' }, ` · ${secs(open.ms)}`) : null);
   }
+}
+
+function updateThinkingClock() {
+  const d = state.current?.decision;
+  const elapsed = state.busy && !d ? secs(Date.now() - state.started)
+    : d ? secs(Number(d.latencyMs) || 0) : '';
+  $('elapsed').textContent = elapsed ? ` · ${elapsed}` : '';
+  const seconds = $('thinking-seconds');
+  if (seconds) seconds.textContent = String(Math.floor((Date.now() - state.started) / 1000));
 }
 
 function renderKnobs() {
@@ -629,7 +654,7 @@ async function triage(caseObj) {
   state.started = Date.now();
   renderAll();
   clearInterval(state.ticker);
-  state.ticker = setInterval(renderScreen, 250);
+  state.ticker = setInterval(updateThinkingClock, 250);
   try {
     const decision = await state.src.triage(caseObj);
     state.current = { caseObj, decision, badge: overruled(decision), arrived: new Date() };

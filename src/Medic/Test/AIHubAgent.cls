@@ -83,6 +83,10 @@ Method TestErrorTextIsShort()
 	set raw = "ERROR <%AICore>ProviderError: Provider 'openai' error: HTTP 404: {"_nl_"""error"": ""model 'qwen9' not found""}"
 	do $$$AssertEquals($classmethod(cls, "ErrorText", raw), "ERROR <%AICore>ProviderError: Provider 'openai' error: HTTP 404")
 	do $$$AssertEquals($classmethod(cls, "ErrorText", "AIHUB_API_KEY is not set"), "AIHUB_API_KEY is not set")
+	set raw = "ERROR <%AICore>ProviderError: Provider 'openai' error: API error: error sending request for url (http://host.docker.internal:11434/v1/chat/completions): error sending request"
+	do $$$AssertEquals($classmethod(cls, "ErrorText", raw), "openai request failed or timed out (AI Hub waits about 60 s per request)")
+	do $$$AssertTrue($classmethod(cls, "IsOllama", "http://host.docker.internal:11434/v1/"))
+	do $$$AssertNotTrue($classmethod(cls, "IsOllama", "https://api.openai.com/v1/"))
 }
 
 Method TestFailsSafeWithoutAIHub()

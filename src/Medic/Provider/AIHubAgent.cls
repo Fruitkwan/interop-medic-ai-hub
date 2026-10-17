@@ -29,8 +29,15 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 			}
 			set settings = {"api_key": ($select(cfg.apiKey '= "": cfg.apiKey, 1: "none"))}
 			if cfg.baseUrl '= "" set settings."base_url" = cfg.baseUrl
+			// AI Hub abandons a request after about 60 s; a local model on a CPU needs longer per round.
+			if ..IsOllama(cfg.baseUrl) {
+				set secs = +$system.Util.GetEnviron("OLLAMA_TIMEOUT")
+				set:secs<=0 secs = 600
+				set settings."http_config" = {"request_timeout_secs": (secs), "attempt_timeout_secs": (secs)}
+			}
 			set agent.Provider = $classmethod("%AI.Provider", "Create", cfg.provider, settings)
 			if cfg.model '= "" set agent.Model = cfg.model
+			if ..IsOllama(cfg.baseUrl) do ..WarmOllama(cfg.baseUrl, cfg.model, pDecision)
 		}
 		$$$ThrowOnError(agent.%Init())
 		// Policies go on before the session, so tool discovery sees them.
@@ -58,6 +65,36 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 	quit $$$OK
 }
 
+/// True for a local Ollama server: OLLAMA_BASE_URL or Ollama's port 11434.
+ClassMethod IsOllama(pBaseUrl As %String) As %Boolean
+{
+	set ollama = $system.Util.GetEnviron("OLLAMA_BASE_URL")
+	quit (pBaseUrl '= "") && (((ollama '= "") && (pBaseUrl [ ollama)) || (pBaseUrl [ ":11434"))
+}
+
+/// Load an Ollama model before the agent uses it. AI Hub abandons an LLM request after about 60 s,
+/// and on a CPU-only machine loading the model (often swapping out the fast tier's) takes longer;
+/// the abandoned request also cancels the load, so every retry starts over. This call has no such
+/// limit and keeps the model loaded for 30 minutes. Failures are left for the agent call to report.
+ClassMethod WarmOllama(pBaseUrl As %String, pModel As %String, pDecision As Medic.Msg.Decision)
+{
+	set start = $zhorolog
+	try {
+		do ##class(%Net.URLParser).Decompose(pBaseUrl, .url)
+		set http = ##class(%Net.HttpRequest).%New()
+		set http.Server = url("host"), http.Timeout = 900
+		if $get(url("port")) '= "" set http.Port = url("port")
+		set http.ContentType = "application/json"
+		do http.EntityBody.Write({"model": (pModel), "prompt": "", "keep_alive": "30m"}.%ToJSON())
+		set sc = http.Post("/api/generate")
+		set ok = $$$ISOK(sc) && (http.HttpResponse.StatusCode = 200)
+	} catch {
+		set ok = 0
+	}
+	set ms = ($zhorolog - start) * 1000 \ 1
+	do pDecision.AddStep("Load model", $select(ok: "ok", 1: "warn"), pModel, $select(ok: "loaded in Ollama", 1: "could not load in Ollama"), ms)
+}
+
 /// One readable line for a provider error. LLM APIs append their whole JSON error body; a quota
 /// or rate-limit reply becomes "<provider> quota or rate limit reached (HTTP 429); retry in 14h37m".
 ClassMethod ErrorText(pText As %String) As %String
@@ -70,6 +107,9 @@ ClassMethod ErrorText(pText As %String) As %String
 			set wait = "; "_$piece(wait, ".")_$select((wait [ ".") && ($extract(wait, *) = "s"): "s", 1: "")
 		}
 		quit $select(provider = "": "LLM", 1: provider)_" quota or rate limit reached (HTTP 429)"_wait
+	}
+	if pText [ "error sending request" {
+		quit $select(provider = "": "LLM", 1: provider)_" request failed or timed out (AI Hub waits about 60 s per request)"
 	}
 	// Anything else: the text before the JSON body, on one line.
 	set text = $piece($piece(pText, "[{", 1), ": {", 1)

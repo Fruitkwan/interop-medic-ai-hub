@@ -182,6 +182,9 @@ OpenAI-compatible API works under a name AI Hub does not know, with `<NAME>_BASE
 `INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/` and `INCEPTION_API_KEY`. The container reads
 every `.env` variable, so new keys need no change to `docker-compose.yml`.
 
+Local Ollama models go in the same list with the provider `ollama` and need no key, only
+`OLLAMA_BASE_URL`: `Gemma=ollama:gemma4,Qwen=ollama:qwen3.8`.
+
 Models listed without a key still appear on the page, greyed out, with the variable to add.
 
 The fast tier can also run a fast chat model, such as Inception's Mercury, through

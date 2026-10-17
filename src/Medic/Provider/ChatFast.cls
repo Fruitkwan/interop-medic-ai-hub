@@ -39,7 +39,13 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 
 		set path = $get(url("path"))
 		if $extract(path, *) '= "/" set path = path_"/"
-		$$$ThrowOnError(http.Post(path_"chat/completions"))
+		$$$ThrowOnError(http.Post(path_"chat/completions", , 0))
+		// Rate limited: wait as asked (at most 5 s) and try once more, never in a loop.
+		if http.HttpResponse.StatusCode = 429 {
+			set wait = +http.HttpResponse.GetHeader("RETRY-AFTER")
+			hang $select((wait > 0) && (wait <= 5): wait, 1: 2)
+			$$$ThrowOnError(http.Post(path_"chat/completions"))
+		}
 		set status = http.HttpResponse.StatusCode
 		if status '= 200 $$$ThrowStatus($$$ERROR($$$GeneralError, "HTTP "_status_": "_$extract(http.HttpResponse.Data.Read(300), 1, 300)))
 		set reply = {}.%FromJSON(http.HttpResponse.Data)
