@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Interop Medic</title>
   <meta name="description" content="Watch an AI Hub agent triage failed HL7 and FHIR messages, check the facts with its tools, and hand risky cases to a person.">
-  <link rel="stylesheet" href="css/hub.css?v=13">
-  <script type="module" src="js/hub.js?v=13"></script>
+  <link rel="stylesheet" href="css/hub.css?v=14">
+  <script type="module" src="js/hub.js?v=14"></script>
 </head>
 <body>
   <header class="top">
@@ -55,8 +55,10 @@
         <div class="knobs">
           <button type="button" class="knob" id="knob-fast" data-key="knob-fast" aria-haspopup="menu" aria-expanded="false"><small>Fast</small> <span class="name">…</span></button>
           <button type="button" class="knob" id="knob-agent" data-key="knob-agent" aria-haspopup="menu" aria-expanded="false"><small>Agent</small> <span class="name">…</span></button>
+          <button type="button" class="knob keys-open" id="keys-open" aria-haspopup="dialog" hidden><small>🔑</small> API keys</button>
         </div>
         <p class="knob-note" id="knob-note"></p>
+        <dialog class="keys-dialog" id="keys-dialog" aria-label="Your API keys"></dialog>
       </div>
 
       <svg class="wire" id="wire-out" viewBox="0 0 44 260" preserveAspectRatio="none" aria-hidden="true">

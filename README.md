@@ -187,6 +187,27 @@ Local Ollama models go in the same list with the provider `ollama` and need no k
 
 Models listed without a key still appear on the page, greyed out, with the variable to add.
 
+### Judges' own keys
+
+The page's **API keys** button lets each visitor paste their own key for any hosted model the
+server lists (Claude, ChatGPT, Grok, Gemini, Mercury, OpenRouter models, ...). A greyed-out model
+turns on once its provider has a key, and a visitor's key replaces the server's for their calls.
+
+- The key stays in that browser tab (`sessionStorage`); closing the tab forgets it.
+- Each triage sends only the keys its chosen models need. The server keeps them in
+  `^IRIS.Temp.MedicKeys` (IRISTEMP: never journaled, cleared on restart) under a one-time token for
+  that request only, and drops them when it ends. Messages carry the token, never the key, and any
+  key a provider echoes in an error is replaced with `***` before the decision is stored.
+- Each tab also picks its own models, sent with every triage, so judges sharing one server never
+  switch models for each other. `POST /models` still sets the server's default.
+- The browser can choose a model and send a key, never a URL: endpoints come from the server's
+  configuration only.
+
+On a shared server (e.g. Azure), serve the page over HTTPS only (Container Apps or App Service
+terminate TLS for you), or keys cross the network in clear text. The API has no login, so anyone
+with the URL can also spend the keys in the server's `.env`: on a public host, leave hosted keys out
+of `.env` and let judges bring their own, or put the app behind authentication.
+
 The fast tier can also run a fast chat model, such as Inception's Mercury, through
 `Medic.Provider.ChatFast`: one JSON-mode call to an OpenAI-compatible `chat/completions` endpoint
 asks the same three questions as System One, with the same wrong-patient guardrail. List them in

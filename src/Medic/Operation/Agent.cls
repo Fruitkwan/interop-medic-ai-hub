@@ -81,7 +81,16 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	set pResponse.DecidedBy = "agent"
 	set pResponse.TraceJSON = fast.TraceJSON
 	do pResponse.AddStep("Gate", "warn", "to agent", reason)
-	set sc = $classmethod(..ProviderClass, "Decide", pRequest, pResponse, fast, ..Config)
+	set cls = ..ProviderClass, cfg = ..Config
+	// The web page chose this message's model (and maybe brought its own key): use it for this message only.
+	if (pRequest.AgentModel '= "") && (pRequest.AgentModel '= ##class(Medic.API.Models).CurrentAgent()) {
+		set chosen = ##class(Medic.API.Models).AgentConfig(pRequest.AgentModel, pRequest.KeyToken)
+		set cls = chosen.providerClass, cfg = chosen.config
+	}
+	set sc = $classmethod(cls, "Decide", pRequest, pResponse, fast, cfg)
+	// Provider errors can echo a key back; none of the judge's keys may reach the stored decision.
+	set pResponse.Rationale = ##class(Medic.API.Keys).Scrub(pRequest.KeyToken, pResponse.Rationale)
+	set pResponse.TraceJSON = ##class(Medic.API.Keys).Scrub(pRequest.KeyToken, pResponse.TraceJSON)
 	set pResponse.CostUSD = pResponse.CostUSD + fast.CostUSD
 	set pResponse.LatencyMs = ($zhorolog - start) * 1000 \ 1
 	quit sc

@@ -91,6 +91,44 @@ Method TestOllamaEntriesNeedNoKey()
 	}
 }
 
+/// A judge's keys live under a token only until Drop, and are scrubbed from any text.
+Method TestJudgeKeysAreTemporary()
+{
+	set keys = "Medic.API.Keys"
+	do $$$AssertEquals($classmethod(keys, "Put", ""), "", "no keys, no token")
+	do $$$AssertEquals($classmethod(keys, "Put", {"openai": ""}), "", "blank keys are ignored")
+	set token = $classmethod(keys, "Put", {"OpenAI": "sk-judge-test-0001", "xai": "xai-judge-test-0002"})
+	do $$$AssertTrue($length(token) = 32)
+	do $$$AssertEquals($classmethod(keys, "Get", token, "openai"), "sk-judge-test-0001", "provider names are case-insensitive")
+	do $$$AssertEquals($classmethod(keys, "Scrub", token, "401: bad key sk-judge-test-0001 for xai-judge-test-0002"), "401: bad key *** for ***")
+	do $$$AssertEquals(##class(Medic.API.Models).Key("openai", token), "sk-judge-test-0001", "the judge's key wins")
+	do $classmethod(keys, "Drop", token)
+	do $$$AssertEquals($classmethod(keys, "Get", token, "openai"), "", "gone after the request")
+	do $$$AssertNotTrue($data(^IRIS.Temp.MedicKeys(token)))
+	set err = ""
+	try { do $classmethod(keys, "Put", {"bad provider!": "x"}) } catch ex { set err = $system.Status.GetOneErrorText(ex.AsStatus()) }
+	do $$$AssertTrue(err [ "bad request:", err)
+	set err = ""
+	try { do $classmethod(keys, "Put", {"openai": ("sk "_$char(10))}) } catch ex { set err = $system.Status.GetOneErrorText(ex.AsStatus()) }
+	do $$$AssertTrue((err [ "bad request:") && (err '[ "sk "), "rejected without echoing the key")
+}
+
+/// A per-message model must be offered, or keyable with the judge's key for its provider.
+Method TestCheckPerMessageModel()
+{
+	set m = "Medic.API.Models"
+	do $$$AssertEquals($classmethod(m, "Check", "agent", ""), "", "blank keeps the production's model")
+	do $$$AssertEquals($classmethod(m, "Check", "agent", "Mock"), "Mock")
+	set err = ""
+	try { do $classmethod(m, "Check", "agent", "NoSuchModel") } catch ex { set err = $system.Status.GetOneErrorText(ex.AsStatus()) }
+	do $$$AssertTrue(err [ "not available", err)
+	set cfg = $classmethod(m, "AgentConfig", "Mock")
+	do $$$AssertEquals(cfg.providerClass, "Medic.Provider.AgentMock")
+	set cfg = $classmethod(m, "FastConfig", "Mock")
+	do $$$AssertEquals(cfg.providerClass, "Medic.Provider.JevMock")
+	do $$$AssertEquals(cfg.stage, "Mock")
+}
+
 Method TestRejectsUnknownAgent()
 {
 	set err = ""

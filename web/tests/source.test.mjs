@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { detectSource } from '../js/source.js';
+import { detectSource, modelsView, keysFor, tabStore } from '../js/source.js';
 
 const bundle = JSON.parse(readFileSync(new URL('../data/bundle.json', import.meta.url), 'utf8'));
 const down = () => Promise.reject(new Error('offline'));
@@ -135,4 +135,47 @@ test('replay models are fixed to Mock', async () => {
   assert.equal(m.agent, 'Mock');
   const after = await src.setModels('Jev', 'Mock');
   assert.equal(after.fast, 'Mock');
+});
+
+const server = {
+  fast: 'Mock', agent: 'Mock',
+  available: { fast: ['Mock', 'Jev'], agent: ['Mock', 'Gemini'] },
+  unavailable: { fast: [], agent: [{ label: 'Claude', need: 'ANTHROPIC_API_KEY', provider: 'anthropic', keyable: true }] },
+  providers: { fast: {}, agent: { Gemini: 'gemini', Claude: 'anthropic' } },
+};
+
+test('a judge key turns a greyed-out model on, only in that view', () => {
+  const v = modelsView(server, { fast: 'Mock', agent: 'Claude' }, { anthropic: 'sk-x' });
+  assert.deepEqual(v.available.agent, ['Mock', 'Gemini', 'Claude']);
+  assert.deepEqual(v.unavailable.agent, []);
+  assert.equal(v.agent, 'Claude');
+  const without = modelsView(server, { fast: 'Mock', agent: 'Claude' }, {});
+  assert.equal(without.agent, 'Mock', 'an unusable choice falls back to the server default');
+  assert.deepEqual(server.available.agent, ['Mock', 'Gemini'], 'the server object is not modified');
+});
+
+test('a triage sends only the keys its chosen models need', () => {
+  const keys = { anthropic: 'sk-a', gemini: 'g-1', xai: 'x-1' };
+  assert.deepEqual(keysFor(server, { fast: 'Mock', agent: 'Claude' }, keys), { anthropic: 'sk-a' });
+  assert.deepEqual(keysFor(server, { fast: 'Mock', agent: 'Mock' }, keys), {});
+});
+
+test('live triage carries the tab models and keys; setModels never posts', async () => {
+  const calls = [];
+  const stub = async (url, init) => {
+    calls.push([String(url), init]);
+    const body = String(url).endsWith('/health') ? { mode: 'live' } : String(url).endsWith('/models') ? server : { ok: 1 };
+    return { ok: true, status: 200, json: async () => body };
+  };
+  const store = tabStore(null);
+  const src = await detectSource(stub, 2000, { base: 'http://h/medic/api', store });
+  await src.models();
+  src.setKeys({ anthropic: ' sk-a ', gemini: '' });
+  const v = await src.setModels('Mock', 'Claude');
+  assert.equal(v.agent, 'Claude');
+  assert.ok(!calls.some(([u, i]) => u.endsWith('/models') && i?.method === 'POST'), 'no server-wide switch');
+  await src.triage({ case_id: 'a' });
+  assert.deepEqual(JSON.parse(calls.at(-1)[1].body),
+    { case: { case_id: 'a' }, models: { fast: 'Mock', agent: 'Claude' }, keys: { anthropic: 'sk-a' } });
+  assert.deepEqual(store.get('medic.keys'), { anthropic: 'sk-a' }, 'blank keys are dropped, others trimmed');
 });

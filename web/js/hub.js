@@ -402,6 +402,7 @@ function renderKnobs() {
     twin.disabled = knob.disabled;
     twin.title = knob.title;
   }
+  $('keys-open').hidden = !state.src?.setKeys;
   $('knob-note').textContent = state.src?.mode === 'live' ? ''
     : state.src?.noRecordings ? 'Mock models in your browser' : 'Models the run was recorded with';
 }
@@ -420,10 +421,12 @@ function toggleModelMenu(tier, anchor = $(`knob-${tier}`)) {
     'aria-checked': String(name === m[tier]),
     onclick: () => { closeModelMenu(); if (name !== m[tier]) setModel(tier, name); },
   }, name));
-  // Configured models without a key: listed, greyed out, with the variable to set on the server.
-  for (const { label, need } of m?.unavailable?.[tier] ?? []) {
+  // Configured models without a key: listed, greyed out. A judge can bring their own key for
+  // most of them (API keys button); the rest need a variable on the server.
+  for (const { label, need, provider, keyable } of m?.unavailable?.[tier] ?? []) {
+    const hint = keyable && state.src?.setKeys ? `Add your ${provider} key under API keys` : `Needs ${need} on the server`;
     items.push(h('button', { type: 'button', role: 'menuitemradio', class: 'opt', disabled: '',
-      'aria-disabled': 'true', title: `Add ${need} to .env and restart` }, label, h('small', {}, 'no key')));
+      'aria-disabled': 'true', title: hint }, label, h('small', {}, 'no key')));
   }
   const menu = h('div', { class: 'model-menu', id: 'model-menu', role: 'menu', 'data-tier': tier, 'data-anchor': anchor.id,
     'aria-label': tier === 'fast' ? 'Fast tier model' : 'Agent model' }, ...items);
@@ -453,6 +456,41 @@ async function setModel(tier, name) {
     $('knob-note').textContent = `Could not switch: ${e.message}`;
   }
   renderKnobs();
+}
+
+/* ---------- API keys (this browser tab only) ---------- */
+
+/** Open the API keys dialog: one password field per provider a judge can bring a key for. */
+function openKeys() {
+  const src = state.src;
+  if (!src?.setKeys) return;
+  const dialog = $('keys-dialog');
+  const keys = src.keys();
+  const providers = Object.entries(src.keyProviders()).sort(([a], [b]) => a.localeCompare(b));
+  const rows = providers.map(([provider, labels]) => h('label', { class: 'key-row' },
+    h('span', { class: 'key-name' }, h('b', {}, provider), h('small', {}, labels.join(', '))),
+    h('input', { type: 'password', name: provider, value: keys[provider] ?? '', autocomplete: 'off',
+      spellcheck: 'false', placeholder: src.serverHasKey(provider) ? 'server key in use (optional)' : 'paste your key' })));
+  const save = (next) => {
+    state.models = src.setKeys(next);
+    dialog.close();
+    renderKnobs();
+  };
+  const form = h('form', { method: 'dialog', class: 'keys-form', onsubmit: (e) => {
+    e.preventDefault();
+    save(Object.fromEntries(new FormData(e.currentTarget)));
+  } },
+  h('h3', {}, 'Your API keys'),
+  h('p', { class: 'muted' }, 'Kept in this browser tab only and sent with each triage for the models you pick. '
+    + 'The server uses a key for that one message and never stores it. Closing the tab forgets them.'),
+  providers.length ? rows : h('p', {}, 'No hosted models are configured on this server.'),
+  h('div', { class: 'keys-actions' },
+    h('button', { type: 'button', class: 'ghost', onclick: () => save({}) }, 'Forget all'),
+    h('button', { type: 'button', class: 'ghost', onclick: () => dialog.close() }, 'Cancel'),
+    h('button', { type: 'submit', class: 'primary' }, 'Save')));
+  fill(dialog, form);
+  dialog.showModal();
+  dialog.querySelector('input')?.focus();
 }
 
 /* ---------- Zone: decision card ---------- */
@@ -949,6 +987,7 @@ async function boot() {
   $('builder').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBuilder(); });
   $('knob-fast').addEventListener('click', () => toggleModelMenu('fast'));
   $('knob-agent').addEventListener('click', () => toggleModelMenu('agent'));
+  $('keys-open').addEventListener('click', openKeys);
   // The model menu closes on Escape or a click anywhere outside it and its knob.
   document.addEventListener('click', (e) => {
     if ($('model-menu') && !e.target.closest('#model-menu, .knob, .canvas-controls .model')) closeModelMenu();

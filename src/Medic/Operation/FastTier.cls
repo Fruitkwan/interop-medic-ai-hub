@@ -80,10 +80,17 @@ Method OnMessage(pRequest As Medic.Msg.FailedMessage, Output pResponse As Medic.
 	set pResponse = ##class(Medic.Msg.Decision).%New()
 	set pResponse.CaseId = pRequest.CaseId
 	set pResponse.DecidedBy = "fast"
-	set sc = $classmethod(..ProviderClass, "Decide", pRequest, pResponse, "", ..Config)
+	set cls = ..ProviderClass, cfg = ..Config, stage = ""
+	// The web page chose this message's model (and maybe brought its own key): use it for this message only.
+	if (pRequest.FastModel '= "") && (pRequest.FastModel '= ##class(Medic.API.Models).CurrentFast()) {
+		set chosen = ##class(Medic.API.Models).FastConfig(pRequest.FastModel, pRequest.KeyToken)
+		set cls = chosen.providerClass, cfg = chosen.config, stage = chosen.stage
+	}
+	set sc = $classmethod(cls, "Decide", pRequest, pResponse, "", cfg)
+	set pResponse.Rationale = ##class(Medic.API.Keys).Scrub(pRequest.KeyToken, pResponse.Rationale)
 	set pResponse.LatencyMs = ($zhorolog - start) * 1000 \ 1
 	if $$$ISOK(sc) {
-		do pResponse.AddStep(..StageName(), "ok", pResponse.Action_" "_$fnumber(pResponse.Confidence, "", 2), pResponse.Rationale, pResponse.LatencyMs)
+		do pResponse.AddStep($select(stage '= "": stage, 1: ..StageName()), "ok", pResponse.Action_" "_$fnumber(pResponse.Confidence, "", 2), pResponse.Rationale, pResponse.LatencyMs)
 	}
 	quit sc
 }

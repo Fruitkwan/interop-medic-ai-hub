@@ -176,6 +176,22 @@ class ApiTest(unittest.TestCase):
         self.assertIn("Mock", body["available"]["fast"])
         self.assertIn("Mock", body["available"]["agent"])
 
+    def test_judge_key_is_used_once_and_never_echoed(self):
+        _, m = call_json("GET", "/models")
+        greyed = [u for u in m["unavailable"]["agent"] if u.get("keyable")]
+        if not greyed:
+            self.skipTest("no keyable agent model without a server key")
+        label, provider = greyed[0]["label"], greyed[0]["provider"]
+        status, _ = call_json("POST", "/triage", {"case": self.fresh_case(), "models": {"fast": "Mock", "agent": label}})
+        self.assertEqual(status, 400, "a greyed-out model needs the judge's key")
+        fake = "judge-test-key-" + uuid.uuid4().hex
+        status, raw = call("POST", "/triage", {"case": self.fresh_case(), "models": {"fast": "Mock", "agent": label},
+                                               "keys": {provider: fake}})
+        self.assertEqual(status, 200)
+        self.assertNotIn(fake, raw.decode("utf-8"))
+        _, after = call_json("GET", "/models")
+        self.assertEqual(after["agent"], m["agent"], "a judge's choice never switches the server")
+
     def test_agent_models_are_labels_only(self):
         _, body = call_json("GET", "/models")
         for label in body["available"]["agent"]:

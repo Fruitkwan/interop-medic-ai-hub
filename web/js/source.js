@@ -27,6 +27,60 @@ function stamp() {
   return new Date().toISOString().replace('T', ' ').replace('Z', '');
 }
 
+/**
+ * Per-tab storage for the judge's model choice and API keys: sessionStorage, so closing the tab
+ * forgets them. Falls back to memory when storage is blocked (private mode, tests).
+ */
+export function tabStore(storage = globalThis.sessionStorage) {
+  const memory = new Map();
+  return {
+    get(key) {
+      try { const v = storage?.getItem(key); if (v != null) return JSON.parse(v); } catch { /* blocked */ }
+      return memory.has(key) ? clone(memory.get(key)) : null;
+    },
+    set(key, value) {
+      memory.set(key, clone(value));
+      try { storage?.setItem(key, JSON.stringify(value)); } catch { /* blocked: memory only */ }
+    },
+  };
+}
+
+/** Labels the browser can run on a tier: the server's, plus keyable ones it holds a key for. */
+export function usableModels(server, tier, keys = {}) {
+  const out = [...(server?.available?.[tier] ?? [])];
+  for (const [label, provider] of Object.entries(server?.providers?.[tier] ?? {})) {
+    if (keys[provider] && !out.includes(label)) out.push(label);
+  }
+  return out;
+}
+
+/**
+ * The models view the page renders: the server's lists with this browser's choice and keys
+ * applied. A chosen label that is no longer usable falls back to the server's default.
+ */
+export function modelsView(server, choice, keys = {}) {
+  if (!server) return server;
+  const view = clone(server);
+  for (const tier of ['fast', 'agent']) {
+    const usable = usableModels(server, tier, keys);
+    view.available[tier] = usable;
+    view.unavailable = view.unavailable ?? {};
+    view.unavailable[tier] = (server.unavailable?.[tier] ?? []).filter((u) => !usable.includes(u.label));
+    if (choice?.[tier] && usable.includes(choice[tier])) view[tier] = choice[tier];
+  }
+  return view;
+}
+
+/** The keys one triage needs: only those of the chosen models' providers. */
+export function keysFor(server, models, keys = {}) {
+  const out = {};
+  for (const tier of ['fast', 'agent']) {
+    const provider = server?.providers?.[tier]?.[models?.[tier]];
+    if (provider && keys[provider]) out[provider] = keys[provider];
+  }
+  return out;
+}
+
 /** API base URL for a page served at /medic/index.html: the relative path ../medic/api. */
 function defaultBase() {
   const loc = globalThis.location;
@@ -43,7 +97,14 @@ async function loadBundle(fetchImpl, opts) {
   return { recordedAt: '', build: '', models: { fast: 'Mock', agent: 'Mock' }, scenarios: [], batches: [] };
 }
 
-function liveSource(fetchImpl, base) {
+function liveSource(fetchImpl, base, store = tabStore()) {
+  // Each browser tab picks its own models and keys and sends them with every triage, so judges
+  // sharing one server never switch models for each other, and keys never sit on the server.
+  let server = null;
+  let choice = store.get('medic.models');
+  let keys = store.get('medic.keys') ?? {};
+  const view = () => modelsView(server, choice, keys);
+  const loadServer = async () => { server = await call('GET', '/models'); return server; };
   async function call(method, path, body) {
     const init = { method };
     if (body !== undefined) {
@@ -59,13 +120,45 @@ function liveSource(fetchImpl, base) {
   return {
     mode: 'live',
     scenarios: () => call('GET', '/scenarios'),
-    triage: (caseObj) => call('POST', '/triage', { case: caseObj }),
+    async triage(caseObj) {
+      if (!choice) return call('POST', '/triage', { case: caseObj });
+      const v = view() ?? {};
+      const models = { fast: v.fast ?? '', agent: v.agent ?? '' };
+      const own = keysFor(server, models, keys);
+      return call('POST', '/triage', Object.keys(own).length ? { case: caseObj, models, keys: own } : { case: caseObj, models });
+    },
     randomCases: (n = 5) => call('GET', `/cases/random?n=${encodeURIComponent(n)}`),
     approve: (id) => call('POST', `/decisions/${encodeURIComponent(id)}/approve`, {}),
     override: (id, action, target, reason) => call('POST', `/decisions/${encodeURIComponent(id)}/override`,
       { action, rerouteTarget: target, reason }),
-    models: () => call('GET', '/models'),
-    setModels: (fast, agent) => call('POST', '/models', { fast, agent }),
+    async models() { await loadServer(); return view(); },
+    /** Choose this tab's models (the server's own default is unchanged). */
+    async setModels(fast, agent) {
+      if (!server) await loadServer();
+      choice = { fast, agent };
+      store.set('medic.models', choice);
+      return view();
+    },
+    /** This tab's keys, by provider. Kept in sessionStorage only. */
+    keys: () => ({ ...keys }),
+    setKeys(next) {
+      keys = Object.fromEntries(Object.entries(next ?? {}).map(([p, k]) => [p, String(k).trim()]).filter(([, k]) => k));
+      store.set('medic.keys', keys);
+      return view();
+    },
+    /** Providers a judge can bring a key for: {provider: [labels]}. */
+    keyProviders() {
+      const out = {};
+      for (const tier of ['fast', 'agent']) {
+        for (const [label, provider] of Object.entries(server?.providers?.[tier] ?? {})) {
+          (out[provider] ??= []).includes(label) || out[provider].push(label);
+        }
+      }
+      return out;
+    },
+    /** Providers whose models all run on the server's own key already. */
+    serverHasKey: (provider) => Object.entries(server?.providers ?? {}).every(([tier, map]) =>
+      Object.entries(map).filter(([, p]) => p === provider).every(([label]) => server.available[tier].includes(label))),
   };
 }
 
@@ -188,7 +281,7 @@ export async function detectSource(fetchImpl = globalThis.fetch, timeoutMs = 200
     probe.catch(() => {}); // a late failure after the timeout must not be unhandled
     const health = await Promise.race([probe, timeout]);
     if (health?.mode === 'live') {
-      const src = liveSource(fetchImpl, base);
+      const src = liveSource(fetchImpl, base, opts.store ?? tabStore());
       src.aihub = !!health.aihub;
       src.build = health.build;
       return src;

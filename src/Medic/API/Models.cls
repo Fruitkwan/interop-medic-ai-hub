@@ -15,12 +15,36 @@ Parameter PRODUCTION = "Medic.Production";
 /// Model setting value that means "send no model" (Laya accepts none); a blank setting would fall back to SYSTEMONE_MODEL.
 Parameter NOMODEL = "-";
 
-/// {"fast","agent","available":{"fast":[...],"agent":[...]},"unavailable":{"fast":[{"label","need"}],"agent":[...]}}
+/// {"fast","agent","available":{"fast":[...],"agent":[...]},
+///  "unavailable":{"fast":[{"label","need","provider","keyable"}],"agent":[...]},
+///  "providers":{"fast":{"<label>":"<provider>"},"agent":{...}}}
+/// "providers" lists the hosted models a judge may run with their own key (keyable ones).
 ClassMethod Get() As %DynamicObject
 {
 	quit {"fast": (..CurrentFast()), "agent": (..CurrentAgent()),
 		"available": {"fast": (..Available("fast")), "agent": (..Available("agent"))},
-		"unavailable": {"fast": (..Unavailable("fast")), "agent": (..Unavailable("agent"))}}
+		"unavailable": {"fast": (..Unavailable("fast")), "agent": (..Unavailable("agent"))},
+		"providers": {"fast": (..Providers("fast")), "agent": (..Providers("agent"))}}
+}
+
+/// {"<label>": "<provider>"} for the tier's hosted models that a judge's own key can run:
+/// the server knows where to send the call (AI Hub provider, <PROVIDER>_BASE_URL), only the key may be missing.
+ClassMethod Providers(pTier As %String) As %DynamicObject
+{
+	set out = {}
+	quit:((pTier = "agent") && '##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")) out
+	set it = $select(pTier = "fast": ..FastModels(), 1: ..AgentModels()).%GetIterator()
+	while it.%GetNext(, .m) { if ..Keyable(pTier, m.provider) do out.%Set(m.label, m.provider) }
+	quit out
+}
+
+/// A key is all this provider needs: not a local model, and the server knows its endpoint.
+ClassMethod Keyable(pTier As %String, pProvider As %String) As %Boolean
+{
+	quit:($zconvert(pProvider, "L") = "ollama") 0
+	set agent = "Medic.Operation.Agent"
+	quit:(pTier = "fast") ..ChatURL(pProvider) '= ""
+	quit $isobject($classmethod(agent, "ProviderInfo", pProvider)) || ($classmethod(agent, "BaseURL", pProvider) '= "")
 }
 
 ClassMethod CurrentFast() As %String
@@ -105,7 +129,9 @@ ClassMethod Unavailable(pTier As %String) As %DynamicArray
 		set name = $translate($zconvert(m.provider, "U"), "-.", "__")
 		set known = $isobject(##class(Medic.Operation.Agent).ProviderInfo(m.provider))
 		set need = $select(name = "OLLAMA": "OLLAMA_BASE_URL", known || (##class(Medic.Operation.Agent).BaseURL(m.provider) '= ""): name_"_API_KEY", 1: name_"_BASE_URL and "_name_"_API_KEY")
-		do out.%Push({"label": (m.label), "need": (need)})
+		set item = {"label": (m.label), "need": (need), "provider": (m.provider)}
+		do item.%Set("keyable", ..Keyable(pTier, m.provider), "boolean")
+		do out.%Push(item)
 	}
 	quit out
 }
@@ -202,8 +228,18 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 {
 	if '..Has(..Available("fast"), pFast) do ..Fail(pFast, "fast")
 	if '..Has(..Available("agent"), pAgent) do ..Fail(pAgent, "agent")
-
 	kill fast, agent
+	do ..FastSettings(pFast, .fast), ..AgentSettings(pAgent, .agent)
+	if (pFast '= ..CurrentFast()) || (pAgent '= ..CurrentAgent()) {
+		$$$ThrowOnError(..Apply(.fast, .agent))
+	}
+	quit ..Get()
+}
+
+/// Host settings of Medic.FastTier for a fast-tier label.
+ClassMethod FastSettings(pFast As %String, Output fast)
+{
+	kill fast
 	// Local models on a CPU can take minutes per call; hosted ones get the usual 10 s.
 	set fast("TimeoutSeconds") = 10, fast("KeyProvider") = "", fast("Stage") = "", fast("Endpoint") = ""
 	if pFast = "Jev" {
@@ -228,6 +264,12 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 	} else {
 		set fast("ProviderClass") = "Medic.Provider.JevMock", fast("BaseURL") = "", fast("Model") = ""
 	}
+}
+
+/// Host settings of Medic.Agent for an agent label.
+ClassMethod AgentSettings(pAgent As %String, Output agent)
+{
+	kill agent
 	set agent("ProviderClass") = $select(pAgent = "Mock": "Medic.Provider.AgentMock", 1: "Medic.Provider.AIHubAgent")
 	set agent("LLMProvider") = "", agent("LLMModel") = "", agent("LLMBaseURL") = "", agent("LLMCredentials") = ""
 	if pAgent = ..OllamaLabel("agent") {
@@ -242,11 +284,57 @@ ClassMethod Set(pFast As %String, pAgent As %String) As %DynamicObject
 		set agent("LLMBaseURL") = ##class(Medic.Operation.Agent).BaseURL(m.provider)
 		set agent("LLMCredentials") = ##class(Medic.Operation.Agent).Credential(m.provider)
 	}
+}
 
-	if (pFast '= ..CurrentFast()) || (pAgent '= ..CurrentAgent()) {
-		$$$ThrowOnError(..Apply(.fast, .agent))
+/// Check a model the page chose for one message: blank (production default), or a label the tier
+/// offers, or a keyable one whose provider has a key in this request. Throws "not available".
+ClassMethod Check(pTier As %String, pLabel As %String, pToken As %String = "") As %String
+{
+	quit:pLabel="" ""
+	quit:..Has(..Available(pTier), pLabel) pLabel
+	set provider = ..Providers(pTier).%Get(pLabel)
+	if (provider '= "") && (##class(Medic.API.Keys).Get(pToken, provider) '= "") quit pLabel
+	do ..Fail(pLabel, pTier)
+	quit ""
+}
+
+/// The key for a provider in this request: the judge's own (Medic.API.Keys), else the server's.
+ClassMethod Key(pProvider As %String, pToken As %String = "") As %String
+{
+	set key = ##class(Medic.API.Keys).Get(pToken, pProvider)
+	quit:key'="" key
+	quit ##class(Medic.Operation.Agent).APIKey(pProvider, ##class(Medic.Operation.Agent).Credential(pProvider))
+}
+
+/// What Medic.FastTier needs to run one message on pLabel: {"providerClass","stage","config"}.
+ClassMethod FastConfig(pLabel As %String, pToken As %String = "") As %DynamicObject
+{
+	do ..FastSettings(pLabel, .s)
+	set cls = s("ProviderClass"), provider = $get(s("KeyProvider"))
+	set key = $select(provider '= "": ..Key(provider, pToken), cls = "Medic.Provider.SystemOne": $system.Util.GetEnviron("SYSTEMONE_API_KEY"), 1: "")
+	set stage = $get(s("Stage"))
+	if stage = "" set stage = $select(cls = "Medic.Provider.JevMock": "Mock", pLabel = "Laya": "Laya", 1: "Jev")
+	set config = {"baseUrl": (s("BaseURL")), "model": ($select(s("Model") = ..#NOMODEL: "", 1: s("Model"))),
+		"apiKey": (key), "timeout": (+$get(s("TimeoutSeconds"), 10)), "endpoint": ($get(s("Endpoint"))),
+		"pricePerMTok": (+..Env("SYSTEMONE_PRICE_PER_MTOK", 0))}
+	quit {"providerClass": (cls), "stage": (stage), "config": (config)}
+}
+
+/// What Medic.Agent needs to run one message on pLabel: {"providerClass","config"}.
+ClassMethod AgentConfig(pLabel As %String, pToken As %String = "") As %DynamicObject
+{
+	do ..AgentSettings(pLabel, .s)
+	set config = {}, provider = s("LLMProvider")
+	if provider '= "" {
+		set config = {"provider": (provider), "model": (s("LLMModel")), "baseUrl": (s("LLMBaseURL"))}
+		set known = $isobject(##class(Medic.Operation.Agent).ProviderInfo(provider))
+		// A provider AI Hub does not know is an OpenAI-compatible API at its base URL.
+		if (s("LLMBaseURL") '= "") && 'known set config.provider = "openai"
+		// A known provider at another base URL is the local Ollama model: it gets no hosted key.
+		set key = $select((s("LLMBaseURL") '= "") && known: "", 1: ..Key(provider, pToken))
+		if key '= "" set config.apiKey = key
 	}
-	quit ..Get()
+	quit {"providerClass": (s("ProviderClass")), "config": (config)}
 }
 
 ClassMethod Apply(ByRef pFast, ByRef pAgent) As %Status [ Private ]

@@ -17,6 +17,16 @@ Property ContextJSON As %String(MAXLEN = "");
 /// Ens.MessageHeader ID of the original failed message, when triaging live traffic.
 Property OriginalHeaderId As %Integer;
 
+/// Models the web page chose for this one message (labels from GET /models); blank means the
+/// production's own settings. Lets each judge pick models without switching them for everyone.
+Property FastModel As %String(MAXLEN = 64);
+
+Property AgentModel As %String(MAXLEN = 64);
+
+/// Token for the judge's own API keys (Medic.API.Keys), valid only while this request runs.
+/// The keys themselves are never in the message.
+Property KeyToken As %String(MAXLEN = 64);
+
 /// Build from one case of dataset/generate.py (labels are never copied in).
 ClassMethod FromCase(pCase As %DynamicObject) As Medic.Msg.FailedMessage
 {

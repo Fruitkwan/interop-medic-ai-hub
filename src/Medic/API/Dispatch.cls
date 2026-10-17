@@ -69,9 +69,24 @@ ClassMethod Triage() As %Status
 		if case."error_text" = "" set case."error_text" = ""
 		if '$isobject(case.context) set case.context = {}
 
-		$$$ThrowOnError(##class(Ens.Director).CreateBusinessService("Medic.Eval", .svc))
-		set target = "Medic.Triage"
-		$$$ThrowOnError(svc.ProcessInput(##class(Medic.Msg.FailedMessage).FromCase(case), .decision, .target))
+		// Optional per-request choices: {"models": {"fast", "agent"}} (labels from GET /models) and
+		// {"keys": {"provider": "key"}}. Keys live only in Medic.API.Keys until this request ends.
+		set token = ##class(Medic.API.Keys).Put(body.keys)
+		try {
+			set req = ##class(Medic.Msg.FailedMessage).FromCase(case)
+			set req.KeyToken = token
+			if $isobject(body.models) {
+				set req.FastModel = ##class(Medic.API.Models).Check("fast", body.models.fast, token)
+				set req.AgentModel = ##class(Medic.API.Models).Check("agent", body.models.agent, token)
+			}
+			$$$ThrowOnError(##class(Ens.Director).CreateBusinessService("Medic.Eval", .svc))
+			set target = "Medic.Triage"
+			$$$ThrowOnError(svc.ProcessInput(req, .decision, .target))
+		} catch inner {
+			do ##class(Medic.API.Keys).Drop(token)
+			throw inner
+		}
+		do ##class(Medic.API.Keys).Drop(token)
 		do ..Reply(##class(Medic.Actions).DecisionJSON(decision))
 	} catch ex { do ..Fail(ex) }
 	quit $$$OK
