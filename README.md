@@ -19,7 +19,8 @@
 - **Safety:** the `/medic` web applications are unauthenticated, for a local demo only. Do not expose
   port 52773.
 - **The demo production** runs `Medic.Triage` with `DryRun` off, so auto-applied decisions show up on
-  the page; every effect is still simulated.
+  the page; every effect is still simulated. To turn it back on, set the `DryRun` setting of
+  Medic.Triage (Policy group) in the production configuration.
 - **Tests:** `node --test "web/tests/*.test.mjs"` for the page, `uv run python -m unittest
   eval/test_record.py` for the recorder.
 - **Re-recording the public bundle:**
@@ -56,9 +57,7 @@ Every decision goes through `Medic.Agent`. The fast tier is the agent's first st
 When it is confident and the case is low-stakes, the agent stops there; reroutes always go to the
 full agent, because only its tools can name a target. Otherwise the agent runs with the fast
 answer as a hint. `Medic.Policy.AutoApply` then decides whether the decision can be applied
-without a person. `DryRun` is on in the class but the demo production turns it off, so the judge page
-can show auto-applied decisions; nothing downstream exists, so every effect is simulated. To turn it
-back on, set the `DryRun` setting of Medic.Triage (Policy group) in the production configuration.
+without a person. `DryRun` is covered in the judges section above and in the table below.
 
 | Setting | Item | Default |
 |---|---|---|
