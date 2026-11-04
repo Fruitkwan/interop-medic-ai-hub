@@ -370,3 +370,7 @@ uv run python -m unittest dataset/test_generate.py
 ```
 
 All data is synthetic. Don't add real messages.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The AI Hub Early Access image and model weights are not part of this repository.
