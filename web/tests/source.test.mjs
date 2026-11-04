@@ -8,11 +8,11 @@ const down = () => Promise.reject(new Error('offline'));
 const replay = () => detectSource(down, 2000, { bundle });
 
 test('bundle has the documented schema', () => {
-  assert.deepEqual(bundle.models, { fast: 'Mock', agent: 'Mock' });
+  assert.deepEqual(bundle.models, { fast: 'Jev', agent: 'Gemma' });
   assert.ok(bundle.recordedAt && bundle.build);
   assert.ok(bundle.scenarios.length >= 4);
   for (const s of bundle.scenarios) assert.ok(s.id && s.label && s.case && s.decision);
-  assert.equal(bundle.batches.length, 2);
+  assert.equal(bundle.batches.length, 3);
   for (const b of bundle.batches) {
     assert.equal(b.length, 5);
     for (const r of b) assert.ok(r.case && r.expected && r.decision);
@@ -128,13 +128,13 @@ test('replay approve rejects an auto-applied mock decision and unknown ids', asy
   await assert.rejects(() => src.approve('nope'), (e) => e.status === 404);
 });
 
-test('replay models are fixed to Mock', async () => {
+test('replay models are fixed to the recorded ones', async () => {
   const src = await replay();
   const m = await src.models();
-  assert.equal(m.fast, 'Mock');
-  assert.equal(m.agent, 'Mock');
-  const after = await src.setModels('Jev', 'Mock');
-  assert.equal(after.fast, 'Mock');
+  assert.equal(m.fast, bundle.models.fast);
+  assert.equal(m.agent, bundle.models.agent);
+  const after = await src.setModels('Mock', 'Mock');
+  assert.equal(after.fast, bundle.models.fast);
 });
 
 const server = {

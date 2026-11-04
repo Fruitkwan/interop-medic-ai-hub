@@ -51,6 +51,9 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		set reply = {}.%FromJSON(http.HttpResponse.Data)
 		$$$ThrowOnError(..ApplyReply(reply.choices.%Get(0).message.content, pDecision))
 		set pDecision.Provider = $classname()_":"_$select(reply.model '= "": reply.model, 1: cfg.model)
+		set pDecision.Model = $select(reply.model '= "": reply.model, 1: cfg.model)
+		set pDecision.InputTokens = +reply.usage."prompt_tokens", pDecision.OutputTokens = +reply.usage."completion_tokens"
+		set pDecision.Completion = reply.choices.%Get(0).message.content
 		set pDecision.CostUSD = (+reply.usage."prompt_tokens") * (+cfg.pricePerMTok) / 1000000
 	} catch ex {
 		do ..Set(pDecision, "escalate", 0, 0.5, "Fast tier unavailable: "_$system.Status.GetOneErrorText(ex.AsStatus()))

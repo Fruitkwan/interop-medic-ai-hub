@@ -21,7 +21,34 @@ ClassMethod Run() As %Status
 	quit:$$$ISERR(sc) sc
 	set sc = ..CreateWebApps()
 	quit:$$$ISERR(sc) sc
+	set sc = ..CreateReviewers()
+	quit:$$$ISERR(sc) sc
 	quit ..SetPasswords(..#DEMOPASSWORD)
+}
+
+/// The Workflow role Medic.Reviewers (the name of the EnsLib.Workflow.Operation item), with the
+/// demo accounts in it, so held decisions show up in their Workflow inbox.
+ClassMethod CreateReviewers() As %Status
+{
+	set role = "Medic.Reviewers"
+	if '##class(EnsLib.Workflow.RoleDefinition).%ExistsId(role) {
+		set def = ##class(EnsLib.Workflow.RoleDefinition).%New()
+		set def.Name = role, def.Description = "People who review Interop Medic decisions held by the policy"
+		set sc = def.%Save()
+		quit:$$$ISERR(sc) sc
+	}
+	set sc = $$$OK
+	for user = "_SYSTEM", "SuperUser", "Admin" {
+		if '##class(EnsLib.Workflow.UserDefinition).%ExistsId(user) {
+			set sc = ##class(EnsLib.Workflow.UserDefinition).CreateUser(user)
+			quit:$$$ISERR(sc)
+		}
+		if '##class(EnsLib.Workflow.RoleMembership).%ExistsId(role_"||"_user) {
+			set sc = ##class(EnsLib.Workflow.RoleDefinition).AddUserToRole(role, user)
+			quit:$$$ISERR(sc)
+		}
+	}
+	quit sc
 }
 
 /// Container start (docker-compose runs it after IRIS is up): applies IRIS_PASSWORD from .env.

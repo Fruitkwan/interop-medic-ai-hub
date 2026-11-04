@@ -24,11 +24,11 @@ PAUSE_S = 20
 TIMEOUT_S = 180
 
 
-def _call(opener, base: str, method: str, path: str, body=None):
+def _call(opener, base: str, method: str, path: str, body=None, timeout: float = TIMEOUT_S):
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(base + path, data=data, method=method,
                                  headers={"Content-Type": "application/json"})
-    with opener(req, timeout=TIMEOUT_S) as resp:
+    with opener(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -60,10 +60,10 @@ def _unavailable(decision: dict) -> bool:
 
 def record(base_url: str, batches: int, out: Path, opener=urllib.request.urlopen,
            fast: str = "Jev", agent: str = "Gemini", sleep=time.sleep, log=print,
-           allow_partial: bool = False) -> dict:
+           allow_partial: bool = False, timeout: float = TIMEOUT_S) -> dict:
     """Record to `out` and return the bundle: {recordedAt, build, models, scenarios, batches}."""
     base = base_url.rstrip("/")
-    api = lambda method, path, body=None: _call(opener, base, method, path, body)  # noqa: E731
+    api = lambda method, path, body=None: _call(opener, base, method, path, body, timeout)  # noqa: E731
 
     def triage(case: dict, name: str):
         """Triage with retries; None when the agent stays unavailable (never returns such a decision)."""
@@ -133,11 +133,13 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=Path("web/data/bundle.json"))
     p.add_argument("--fast", default="Jev")
     p.add_argument("--agent", default="Gemini")
+    p.add_argument("--timeout", type=float, default=TIMEOUT_S,
+                   help="seconds to wait for one triage (a local model on a CPU needs several minutes)")
     p.add_argument("--allow-partial", action="store_true", help="write the bundle even if cases were skipped")
     args = p.parse_args()
     try:
         record(args.base, args.batches, args.out, fast=args.fast, agent=args.agent,
-               log=lambda m: print(m, flush=True), allow_partial=args.allow_partial)
+               log=lambda m: print(m, flush=True), allow_partial=args.allow_partial, timeout=args.timeout)
     except PartialRecording as e:
         sys.exit(f"ERROR: {e}")
 

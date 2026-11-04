@@ -21,6 +21,10 @@ XData ProductionDefinition
   </Item>
   <Item Name="Medic.FastTier" Category="" ClassName="Medic.Operation.FastTier" PoolSize="1" Enabled="true">
   </Item>
+  <Item Name="Medic.Review" Category="Review" ClassName="Medic.Process.Review" PoolSize="1" Enabled="true">
+  </Item>
+  <Item Name="Medic.Reviewers" Category="Review" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true">
+  </Item>
 </Production>
 }
 

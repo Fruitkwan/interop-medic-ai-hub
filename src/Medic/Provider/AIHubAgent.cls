@@ -46,7 +46,10 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		do agent.ToolManager.SetAuditPolicy(trace)
 		// Temperature 0: the same message should get the same decision.
 		set session = agent.CreateSession({"temperature": 0})
-		set response = agent.Chat(session, ..Prompt(pReq, pHint))
+		set prompt = ..Prompt(pReq, pHint)
+		set pDecision.Model = agent.Model, pDecision.Prompt = prompt
+		set response = agent.Chat(session, prompt)
+		set pDecision.Completion = response.Content, pDecision.ToolCalls = trace.Calls.%ToJSON()
 		set it = trace.Calls.%GetIterator()
 		while it.%GetNext(, .call) {
 			do pDecision.AddStep(call.tool, $select(call.ok: "ok", 1: "bad"), ..ToolValue(call.tool, call.summary), call.summary, call.ms)
@@ -56,8 +59,12 @@ ClassMethod Decide(pReq As Medic.Msg.FailedMessage, pDecision As Medic.Msg.Decis
 		set pDecision.Rationale = pDecision.Rationale_$select(tools = "": " [no tools called]", 1: " [tools: "_tools_"]")
 		set pDecision.Provider = $classname()_":"_agent.Model
 		do pDecision.AddStep("Agent", "ok", pDecision.Action_" "_$fnumber(pDecision.Confidence, "", 2), pDecision.Rationale)
-		set pDecision.CostUSD = ..Cost(session.GetStats())
+		set stats = session.GetStats()
+		set pDecision.CostUSD = ..Cost(stats)
+		if $isobject(stats) set pDecision.InputTokens = +stats."total_prompt_tokens", pDecision.OutputTokens = +stats."total_completion_tokens"
 	} catch ex {
+		// Keep what the failed run did, so the Visual Trace shows the attempt too.
+		if $isobject($get(trace)) set pDecision.ToolCalls = trace.Calls.%ToJSON()
 		set why = "AI Hub agent unavailable: "_..ErrorText($system.Status.GetOneErrorText(ex.AsStatus()))
 		do ..Set(pDecision, "escalate", 0, 0.5, why)
 		do pDecision.AddStep("Agent", "bad", "unavailable", why)

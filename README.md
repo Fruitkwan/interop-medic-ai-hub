@@ -31,8 +31,9 @@
   ```
 
   If any case is skipped (for example on a quota error), the recorder leaves the bundle untouched,
-  writes `bundle.partial.json` next to it and exits nonzero; `--allow-partial` overrides that. The committed bundle is currently a
-  **Mock/Mock** recording. A real Jev + Gemini recording replaces it once that has been run.
+  writes `bundle.partial.json` next to it and exits nonzero; `--allow-partial` overrides that. The committed bundle is a
+  real **Jev + Gemma** run (local Gemma through AI Hub): add `--fast` and `--agent` to pick other
+  models, and `--timeout 900` for a local model on a CPU.
 - **Publishing:** the `Deploy web/ to GitHub Pages` workflow (`.github/workflows/pages.yml`) is
   manual (`workflow_dispatch`) and runs the page tests before it deploys `web/`.
 
@@ -43,17 +44,19 @@ proposed fix.
 
 > **Status:** this runs fully offline with mock providers. The fast tier can call Jev or Laya. The
 > AI Hub agent (`Medic.AIHub.TriageAgent`) only compiles on the AI Hub Early Access build (154). It
-> has run there on real Gemini: it escalated a critical result using ValidateHL7/CheckEndpoint and
-> SearchPrecedents. The full real-model recording is pending a Gemini quota reset; the bundled
-> recording uses the mock models.
+> has run there on real Gemini and Gemma: it escalated a critical result using
+> ValidateHL7/CheckEndpoint and SearchPrecedents. The bundled recording is a real Jev + Gemma run of
+> 16 scenarios and 15 random cases.
 
 ## How it works
 
 ```
 Medic.DemoFeed ──> Medic.Triage (BPL) ──> Medic.Agent ──> Medic.FastTier
  (case files)       policy + dry run       │  1. ask the fast tier (Jev, Laya or mock)
-                                           │  2. confident & low severity? accept it
-                                           └  3. otherwise run the tool-using agent
+                         │                 │  2. confident & low severity? accept it
+                         │                 └  3. otherwise run the tool-using agent
+                         └─ held for a person ──> Medic.Review ──> Medic.Reviewers
+                                                  (Workflow task in the IRIS Workflow inbox)
 ```
 
 Every decision goes through `Medic.Agent`. The fast tier is the agent's first step, not a bypass.
@@ -68,6 +71,43 @@ without a person. `DryRun` is covered in the judges section above and in the tab
 | `ProviderClass` | Medic.Agent | `MEDIC_AGENT_PROVIDER`, else `Medic.Provider.AgentMock` |
 | `FastConfidence`, `FastSeverityCeiling` | Medic.Agent | 0.85, 0.6 |
 | `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, off in the demo production (on in the class) |
+
+### Held decisions become Workflow tasks
+
+When the policy holds a decision for a person, `Medic.Triage` also sends it to `Medic.Review`,
+which opens an IRIS **Workflow Engine** task for the role `Medic.Reviewers` (the
+`EnsLib.Workflow.Operation` item of that name; `_SYSTEM`, `SuperUser` and `Admin` are members).
+The task shows the proposed action, confidence, severity, rationale and fix, with the choices
+**Approve**, **Escalate** and **Quarantine**. Answer it in the Workflow inbox
+(`http://localhost:52773/csp/user/_DeepSee.UserPortal.Workflow.zen`, or Management Portal >
+Interoperability > Workflow > Workflow Inbox) and the answer goes through the same code as the
+web page's buttons: the trace gets a person step, the audit trail a row and the precedent store
+the case. Whoever decides first wins; deciding on the page completes the task.
+
+### Every LLM call in the Visual Trace (Community idea DPI-I-689)
+
+This entry implements [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689), *Use InterSystems
+Interoperability as a Traceability tool for GenAI LLM pipelines*. Each model call is a message in
+the production, so the Visual Trace of one failed message holds the whole pipeline: the fast
+model's call, the gate, the agent's run with each tool call, the policy, and a person's review.
+
+To see it: triage a scenario on the web page (e.g. *Critical result*), then open Interoperability >
+Message Viewer, pick the session's newest `Medic.Triage` row and click **Trace**. Click the
+`Medic.Msg.Decision` response of `Medic.Agent` (and of `Medic.FastTier`). Its body shows:
+
+| Field | What it holds |
+|---|---|
+| `Model`, `Provider` | the model id and the provider class that ran it |
+| `InputTokens`, `OutputTokens`, `CostUSD`, `LatencyMs` | usage, estimated cost and duration |
+| `Prompt`, `Completion` | the user turn sent to the agent and the model's raw reply (the fast tier has no prompt text: its reply is the typed answers) |
+| `ToolCalls` | each agent tool call in order, with its arguments, result (first 1,000 characters), duration and status |
+| `TraceJSON` | the steps the web page draws (fast tier, gate, tools, agent, policy, person) |
+
+The same session also holds the `Medic.Msg.ReviewRequest` and the Workflow task when a person
+has to look. Nothing leaves IRIS: prompts and patient data stay in the production, and the trace
+leads straight to an action (approve, override, resend). The vector precedent store
+(`Medic.Data.Precedent`, IRIS Vector Search) is part of the same trace: `SearchPrecedents` calls
+appear in `ToolCalls` with the case they found.
 
 ## Run it
 
@@ -304,7 +344,7 @@ Tests:
 
 ```bash
 uv run python -m unittest eval/test_score.py dataset/test_generate.py
-docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","")'
+docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Review","","")'
 ```
 
 ## Dataset

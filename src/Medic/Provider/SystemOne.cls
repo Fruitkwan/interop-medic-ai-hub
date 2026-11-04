@@ -108,6 +108,8 @@ ClassMethod ApplyAnswers(pResponse As %DynamicObject, pDecision As Medic.Msg.Dec
 	}
 	do ..Set(pDecision, action, $select(conf > 1: 1, conf < 0: 0, 1: conf), $select(sev > 1: 1, sev < 0: 0, 1: sev), why)
 	set pDecision.Provider = $classname()_":"_$select(pResponse.model '= "": pResponse.model, 1: "unknown")
+	set pDecision.Model = pResponse.model, pDecision.InputTokens = +pResponse.usage."input_tokens"
+	set pDecision.OutputTokens = +pResponse.usage."output_tokens", pDecision.Completion = $extract(pResponse.answers.%ToJSON(), 1, 4000)
 	set price = $select($isobject(pConfig): +pConfig.pricePerMTok, 1: 0)
 	set pDecision.CostUSD = (+pResponse.usage."input_tokens") * price / 1000000
 }

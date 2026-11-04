@@ -7,10 +7,12 @@
       <Description>An AI agent that triages failed HL7 and FHIR messages in IRIS Interoperability.</Description>
       <Keywords>interoperability,hl7,fhir,ai,agent</Keywords>
       <Packaging>module</Packaging>
-      <SourcesRoot>src</SourcesRoot>
-      <Resource Name="Medic.PKG"/>
+      <SourcesRoot>.</SourcesRoot>
+      <Resource Name="Medic.PKG" Directory="src"/>
+      <!-- The AI Hub agent: build 154 or later only (see SystemRequirements). -->
+      <Resource Name="Medic.AIHub.PKG" Directory="src-aihub"/>
       <Invoke Class="Medic.Setup" Method="Run"/>
-      <SystemRequirements Interoperability="enabled"/>
+      <SystemRequirements Version="&gt;=2026.3" Interoperability="enabled"/>
     </Module>
   </Document>
 </Export>

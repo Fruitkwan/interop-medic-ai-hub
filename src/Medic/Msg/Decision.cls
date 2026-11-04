@@ -34,6 +34,23 @@ Property CostUSD As %Numeric(SCALE = 8) [ InitialExpression = 0 ];
 /// JSON array of steps {stage, status, value, detail, ms} that led to this decision; status is ok, warn, bad or hum.
 Property TraceJSON As %String(MAXLEN = "");
 
+/// The LLM call behind this decision, shown in the Visual Trace with the message (Community idea
+/// DPI-I-689: Interoperability as the tracing tool for LLM pipelines). Blank for the mocks.
+Property Model As %String(MAXLEN = 128);
+
+Property InputTokens As %Integer;
+
+Property OutputTokens As %Integer;
+
+/// The user turn sent to the model (the system instructions are in Medic.AIHub.TriageAgent).
+Property Prompt As %String(MAXLEN = "");
+
+/// The model's raw reply, before parsing.
+Property Completion As %String(MAXLEN = "");
+
+/// JSON array of the agent's tool calls in order: {tool, arguments, summary, ms, ok}.
+Property ToolCalls As %String(MAXLEN = "");
+
 /// Append one step to the trace.
 Method AddStep(pStage As %String, pStatus As %String, pValue As %String, pDetail As %String = "", pMs As %Integer = 0)
 {
@@ -58,7 +75,8 @@ Method Steps() As %DynamicArray
 /// replacing that object instead leaves an empty, header-less Decision row behind).
 Method CopyFrom(pOther As Medic.Msg.Decision)
 {
-	for prop = "CaseId", "Action", "Confidence", "Severity", "Rationale", "ProposedFix", "RerouteTarget", "DecidedBy", "Provider", "AutoApplied", "LatencyMs", "CostUSD", "TraceJSON" {
+	for prop = "CaseId", "Action", "Confidence", "Severity", "Rationale", "ProposedFix", "RerouteTarget", "DecidedBy", "Provider", "AutoApplied", "LatencyMs", "CostUSD", "TraceJSON",
+		"Model", "InputTokens", "OutputTokens", "Prompt", "Completion", "ToolCalls" {
 		set $property($this, prop) = $property(pOther, prop)
 	}
 }

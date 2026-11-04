@@ -10,7 +10,10 @@ Property AutoApplyThreshold As %Numeric [ InitialExpression = 0.9 ];
 /// When on, nothing is applied; every decision is only recorded.
 Property DryRun As %Boolean [ InitialExpression = 1 ];
 
-Parameter SETTINGS = "AgentTarget:Basic,AutoApplyThreshold:Policy,DryRun:Policy";
+/// Where a decision held for a person goes to become a Workflow task. Blank: no task.
+Property ReviewTarget As Ens.DataType.ConfigName [ InitialExpression = "Medic.Review" ];
+
+Parameter SETTINGS = "AgentTarget:Basic,ReviewTarget:Basic,AutoApplyThreshold:Policy,DryRun:Policy";
 
 XData BPL [ XMLNamespace = "http://www.intersystems.com/bpl" ]
 {
@@ -30,7 +33,11 @@ XData BPL [ XMLNamespace = "http://www.intersystems.com/bpl" ]
 <code name='Apply policy' xpos='200' ypos='350' >
 <![CDATA[ do response.CopyFrom(context.Decision)
  set response.AutoApplied = ##class(Medic.Policy.AutoApply).CanAutoApply(response, process.AutoApplyThreshold, process.DryRun)
- do response.AddPolicyStep(process.AutoApplyThreshold, process.DryRun)]]>
+ do response.AddPolicyStep(process.AutoApplyThreshold, process.DryRun)
+ // Held for a person: also a Workflow task (sent without waiting; the reviewer may answer much later).
+ if 'response.AutoApplied && (process.ReviewTarget '= "") {
+   do process.SendRequestAsync(process.ReviewTarget, ##class(Medic.Msg.ReviewRequest).From(response), 0)
+ }]]>
 </code>
 </sequence>
 </process>

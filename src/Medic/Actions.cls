@@ -56,6 +56,9 @@ ClassMethod DecisionJSON(pDecision As Medic.Msg.Decision) As %DynamicObject
 		"autoApplied": (pDecision.AutoApplied + 0),
 		"latencyMs": (+pDecision.LatencyMs),
 		"costUSD": (+pDecision.CostUSD),
+		"model": (pDecision.Model),
+		"inputTokens": (+pDecision.InputTokens),
+		"outputTokens": (+pDecision.OutputTokens),
 		"trace": (pDecision.Steps()),
 		"audit": (##class(Medic.Data.Audit).ForDecision(pDecision.%Id()))
 	}
@@ -113,6 +116,8 @@ ClassMethod Simulated(pAction As %String) As %String [ Private ]
 ClassMethod Finish(pDecision As Medic.Msg.Decision, pActor As %String, pSummary As %String) As %DynamicObject [ Private ]
 {
 	set sc = ##class(Medic.Data.Precedent).Store(pDecision, ..ErrorTextFor(pDecision), pSummary, pActor)
+	// Decided here: the case's Workflow task, if any, is no longer waiting for anyone.
+	do ##class(Medic.Process.Review).CloseTask(pDecision.CaseId, $zconvert($extract(pDecision.Action), "U")_$extract(pDecision.Action, 2, *))
 	set json = ..DecisionJSON(pDecision)
 	quit {"ok": 1, "decision": (json), "trace": (json.trace), "audit": (json.audit), "precedent": ($select($$$ISOK(sc): 1, 1: 0))}
 }

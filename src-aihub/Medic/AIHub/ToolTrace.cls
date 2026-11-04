@@ -16,8 +16,10 @@ Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result 
 {
 	set call = $get(call), result = $get(result), status = $get(status, 1)
 	set name = $select($isobject(call): call.name, 1: "?")
-	set args = $select($isobject(call) && $isobject(call.arguments): call.arguments.%ToJSON(), 1: "")
-	set summary = $extract($select($isobject(result): result.%ToJSON(), 1: result), 1, 160)
+	// Build 154 passes the arguments as a JSON string, not an object.
+	set args = ""
+	if $isobject(call) set args = $select($isobject(call.arguments): call.arguments.%ToJSON(), 1: call.arguments)
+	set summary = $extract($select($isobject(result): result.%ToJSON(), 1: result), 1, 1000)
 	do ..Calls.%Push({"tool": (name), "arguments": (args), "summary": (summary), "ms": (+$get(duration)), "ok": ($$$ISOK(status))})
 	quit $$$OK
 }
