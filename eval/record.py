@@ -96,7 +96,8 @@ def record(base_url: str, batches: int, out: Path, opener=urllib.request.urlopen
             if decision is None:
                 skipped += 1
                 continue
-            bundle["scenarios"].append({"id": s["id"], "label": s["label"], "case": s["case"], "decision": decision})
+            bundle["scenarios"].append({"id": s["id"], "label": s["label"], "case": s["case"],
+                                        "expected": s.get("expected"), "decision": decision})
         for b in range(batches):
             batch = []
             for i, item in enumerate(api("GET", "/cases/random?n=5")):

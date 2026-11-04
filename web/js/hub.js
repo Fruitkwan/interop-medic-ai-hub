@@ -39,17 +39,20 @@ const median = (xs) => {
 };
 
 /**
- * Batch KPIs over rows of {expected:{action}, decision:{action, decidedBy, costUSD, latencyMs}}.
+ * KPIs over rows of {expected?:{action}, decision:{action, decidedBy, costUSD, latencyMs}}.
+ * Only rows with an expected action are scored; a built message has none.
  * @returns {{correct:number, total:number, fastShare:number|null, costPerDecision:number|null, medianMs:number|null}}
  */
 export function kpis(rows) {
   const total = rows.length;
-  if (total === 0) return { correct: 0, total: 0, fastShare: null, costPerDecision: null, medianMs: null };
-  const correct = rows.filter((r) => r.expected?.action === r.decision.action).length;
+  if (total === 0) return { correct: 0, scored: 0, total: 0, fastShare: null, costPerDecision: null, medianMs: null };
+  const labelled = rows.filter((r) => r.expected?.action);
+  const correct = labelled.filter((r) => r.expected.action === r.decision.action).length;
   const fast = rows.filter((r) => r.decision.decidedBy === 'fast').length;
   const cost = rows.reduce((sum, r) => sum + (Number(r.decision.costUSD) || 0), 0);
   return {
     correct,
+    scored: labelled.length,
     total,
     fastShare: fast / total,
     costPerDecision: cost / total,
@@ -70,8 +73,10 @@ const PILL = { resend: 'p-res', fix_and_resend: 'p-fix', reroute: 'p-rer', quara
 const STATUS_WORD = { ok: 'ok', warn: 'warning', bad: 'problem', hum: 'a person acted' };
 
 const actionLabel = (a) => ACTION_LABEL[a] ?? String(a ?? '');
-const secs = (ms) => (ms < 100 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
-const usd = (x) => `$${Number(x).toFixed(4)}`;
+const secs = (ms) => (ms < 100 ? `${Math.round(ms)} ms`
+  : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`);
+/** Dollars; a fraction of a cent keeps two significant digits instead of rounding to $0.0000. */
+const usd = (x) => { const n = Number(x); return n > 0 && n < 0.01 ? `$${n.toPrecision(2)}` : `$${n.toFixed(4)}`; };
 const pct = (x) => `${Math.round(x * 100)}%`;
 /** "HH:MM:SS" from an audit timestamp ("YYYY-MM-DD HH:MM:SS.mmm") or a Date (UTC, like the API). */
 const clock = (at) => (at instanceof Date ? at.toISOString().slice(11, 19) : String(at ?? '').slice(11, 19));
@@ -177,7 +182,8 @@ const state = {
   started: 0,
   ticker: null,
   models: null,
-  batchRows: [],
+  runRows: [], // every decision made in this tab
+  baseline: null, // the recorded run, shown until runRows has something
   openStep: null,
   builderOpen: false,
   builderFormat: 'hl7v2', // the format the built case is sent as: the base's, or a loaded file's
@@ -203,13 +209,13 @@ function renderEvidence() {
   h('span', { class: 'queue-copy' }, h('b', {}, caseLabel(s)), h('small', {}, s.case?.format === 'fhir' ? 'FHIR R4' : 'HL7 v2')),
   h('span', { class: 'queue-side' }, h('time', {}, queueTime(i)), h('em', {}, errorLabel(s))))));
 
-  const k = kpis(state.batchRows);
+  const { k, note } = scoreboard();
   const metric = (value, label, width) => h('div', { class: 'e-kpi' }, h('b', {}, value), h('span', {}, label), h('div', { class: 'e-meter' }, h('i', { style: `width:${width}%` })));
   fill($('evidence-kpis'),
-    metric(k.total ? `${k.correct} / ${k.total}` : '—', 'Correct (batch)', k.total ? (k.correct / k.total) * 100 : 0),
+    metric(k.scored ? `${k.correct} / ${k.scored}` : '—', `Correct (${note})`, k.scored ? (k.correct / k.scored) * 100 : 0),
     metric(k.total ? pct(k.fastShare) : '—', 'Decided by fast tier', k.total ? k.fastShare * 100 : 0),
-    metric(k.total ? usd(k.costPerDecision) : '—', 'Cost per decision (batch)', k.total ? 54 : 0),
-    metric(k.total ? secs(k.medianMs) : '—', 'Median time per decision (batch)', k.total ? 72 : 0));
+    metric(k.total ? usd(k.costPerDecision) : '—', 'Cost per decision', k.total ? 54 : 0),
+    metric(k.total ? secs(k.medianMs) : '—', 'Median time per decision', k.total ? 72 : 0));
 
   const d = state.current?.decision;
   const c = state.current?.caseObj;
@@ -628,12 +634,20 @@ function renderAudit() {
 
 /* ---------- Zone: KPI strip and batch list ---------- */
 
+/** The numbers to show: this tab's own runs, else the recorded run, and which of the two it is. */
+function scoreboard() {
+  const own = state.runRows.length > 0;
+  const b = state.baseline;
+  const k = kpis(own ? state.runRows : b?.rows ?? []);
+  return { k, note: own ? 'this session' : b ? `recorded run, ${b.models.fast} + ${b.models.agent}` : 'run a message' };
+}
+
 function renderKpis() {
-  const k = kpis(state.batchRows);
+  const { k, note } = scoreboard();
   const none = k.total === 0;
   const tile = (n, l) => h('div', { class: 'kpi' }, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l));
   fill($('kpis'),
-    tile(none ? '—' : pct(k.correct / k.total), none ? 'Correct · run a batch' : `Correct (${k.correct} of ${k.total} batch cases)`),
+    tile(k.scored ? pct(k.correct / k.scored) : '—', k.scored ? `Correct (${k.correct} of ${k.scored}, ${note})` : `Correct · ${note}`),
     tile(none ? '—' : pct(k.fastShare), 'Decided by the fast tier'),
     tile(none ? '—' : usd(k.costPerDecision), 'Cost per decision'),
     tile(none ? '—' : secs(k.medianMs), 'Median time per decision'),
@@ -642,7 +656,6 @@ function renderKpis() {
 }
 
 function appendBatchRow(row) {
-  state.batchRows.push(row);
   const { expected, decision: d, caseObj } = row;
   const ok = expected?.action === d.action;
   $('batch').hidden = false;
@@ -653,7 +666,6 @@ function appendBatchRow(row) {
     h('td', { class: ok ? 'yes' : 'no' }, ok ? '✓' : '✗', h('span', { class: 'sr' }, ok ? ' correct' : ' wrong')),
     h('td', { class: 'num' }, secs(Number(d.latencyMs) || 0)),
     h('td', { class: 'num' }, usd(d.costUSD || 0))));
-  renderKpis();
 }
 
 /* ---------- Runs ---------- */
@@ -681,7 +693,7 @@ function setBusy(busy) {
 }
 
 /** Triage one case, showing the thinking row until the answer arrives. Returns the decision or null. */
-async function triage(caseObj) {
+async function triage(caseObj, expected) {
   state.current = null;
   state.thinking = true;
   state.triageError = '';
@@ -696,6 +708,9 @@ async function triage(caseObj) {
   try {
     const decision = await state.src.triage(caseObj);
     state.current = { caseObj, decision, badge: overruled(decision), arrived: new Date() };
+    // A replayed decision is already in the recorded totals.
+    if (decision.source !== 'replay') state.runRows.push({ caseObj, expected, decision });
+    renderKpis();
     return decision;
   } catch (e) {
     state.triageError = e.message;
@@ -714,7 +729,7 @@ async function runScenario(s) {
   $('batch-note').textContent = '';
   setBusy(true);
   try {
-    await triage(s.case);
+    await triage(s.case, s.expected);
   } finally {
     setBusy(false);
   }
@@ -735,7 +750,7 @@ async function runBatch() {
     }
     for (const [i, { case: caseObj, expected }] of cases.entries()) {
       $('batch-note').textContent = `Case ${i + 1} of ${cases.length}…`;
-      const decision = await triage(caseObj);
+      const decision = await triage(caseObj, expected);
       if (decision) appendBatchRow({ caseObj, expected, decision });
     }
     $('batch-note').textContent = '';
@@ -1004,6 +1019,7 @@ async function boot() {
   // A pending focus restore is dropped as soon as the person moves focus or clicks elsewhere.
   document.addEventListener('pointerdown', () => { pendingFocus = null; });
   document.addEventListener('focusin', (e) => { if (e.target.dataset?.key !== pendingFocus) pendingFocus = null; });
+  try { state.baseline = await src.baseline(); } catch { state.baseline = null; }
   renderAll();
   renderKpis();
   const hero = state.scenarios.find((s) => s.id === HERO);

@@ -7,7 +7,7 @@ Parameter DATASET = "/dataset/cases.jsonl";
 /// These corruption types come first, in this order.
 Parameter FEATURED = "endpoint_timeout,outage_critical_result,unknown_receiver,patient_mismatch";
 
-/// [{"id","label","case"}] one per corruption type: the first case with an ASCII raw_message, featured types first.
+/// [{"id","label","case","expected"}] one per corruption type: the first case with an ASCII raw_message, featured types first.
 ClassMethod List() As %DynamicArray
 {
 	kill first, order
@@ -62,8 +62,10 @@ ClassMethod Random(pN As %Integer = 5) As %DynamicArray
 
 ClassMethod Entry(pType As %String, pCase As %DynamicObject) As %DynamicObject [ Private ]
 {
+	// The label stays beside the case, for the page's score: it is never sent to a model.
+	set expected = pCase.expected
 	do pCase.%Remove("expected")
-	quit {"id": (pType), "label": (..Label(pType)), "case": (pCase)}
+	quit {"id": (pType), "label": (..Label(pType)), "case": (pCase), "expected": (expected)}
 }
 
 ClassMethod Label(pType As %String) As %String

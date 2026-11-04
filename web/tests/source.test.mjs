@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { detectSource, modelsView, keysFor, tabStore } from '../js/source.js';
+import { detectSource, modelsView, keysFor, tabStore, baselineOf } from '../js/source.js';
 
 const bundle = JSON.parse(readFileSync(new URL('../data/bundle.json', import.meta.url), 'utf8'));
 const down = () => Promise.reject(new Error('offline'));
@@ -178,4 +178,18 @@ test('live triage carries the tab models and keys; setModels never posts', async
   assert.deepEqual(JSON.parse(calls.at(-1)[1].body),
     { case: { case_id: 'a' }, models: { fast: 'Mock', agent: 'Claude' }, keys: { anthropic: 'sk-a' } });
   assert.deepEqual(store.get('medic.keys'), { anthropic: 'sk-a' }, 'blank keys are dropped, others trimmed');
+});
+
+test('the recorded run fills the score strip, with a label on every case', async () => {
+  const b = await (await replay()).baseline();
+  assert.equal(b.rows.length, bundle.scenarios.length + bundle.batches.flat().length);
+  assert.ok(b.rows.every((r) => r.expected?.action && r.decision), 'every recorded case is scored');
+  assert.deepEqual(b.models, bundle.models);
+  assert.equal(baselineOf({ scenarios: [], batches: [] }), null, 'no recording, no baseline');
+});
+
+test('scenarios keep their expected answer outside the case sent to a model', async () => {
+  const [s] = await (await replay()).scenarios();
+  assert.ok(s.expected?.action);
+  assert.equal(s.case.expected, undefined);
 });

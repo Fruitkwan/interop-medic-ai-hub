@@ -81,6 +81,13 @@ export function keysFor(server, models, keys = {}) {
   return out;
 }
 
+/** A bundle's decisions as score rows, for the strip before anyone has run anything. */
+export function baselineOf(bundle) {
+  const rows = [...(bundle?.scenarios ?? []), ...(bundle?.batches ?? []).flat()]
+    .map(({ case: caseObj, expected, decision }) => ({ caseObj, expected, decision }));
+  return rows.length ? { rows, models: bundle.models, recordedAt: bundle.recordedAt } : null;
+}
+
 /** API base URL for a page served at /medic/index.html: the relative path ../medic/api. */
 function defaultBase() {
   const loc = globalThis.location;
@@ -97,7 +104,7 @@ async function loadBundle(fetchImpl, opts) {
   return { recordedAt: '', build: '', models: { fast: 'Mock', agent: 'Mock' }, scenarios: [], batches: [] };
 }
 
-function liveSource(fetchImpl, base, store = tabStore()) {
+function liveSource(fetchImpl, base, store = tabStore(), opts = {}) {
   // Each browser tab picks its own models and keys and sends them with every triage, so judges
   // sharing one server never switch models for each other, and keys never sit on the server.
   let server = null;
@@ -131,6 +138,8 @@ function liveSource(fetchImpl, base, store = tabStore()) {
     approve: (id) => call('POST', `/decisions/${encodeURIComponent(id)}/approve`, {}),
     override: (id, action, target, reason) => call('POST', `/decisions/${encodeURIComponent(id)}/override`,
       { action, rerouteTarget: target, reason }),
+    /** The recorded run shipped with the page, shown until this tab has runs of its own. */
+    async baseline() { return baselineOf(await loadBundle(fetchImpl, opts)); },
     async models() { await loadServer(); return view(); },
     /** Choose this tab's models (the server's own default is unchanged). */
     async setModels(fast, agent) {
@@ -197,7 +206,7 @@ function replaySource(bundle) {
     recordedAt: bundle.recordedAt,
     build: bundle.build,
     async scenarios() {
-      return bundle.scenarios.map(({ id, label, case: c }) => ({ id, label, case: clone(c) }));
+      return bundle.scenarios.map(({ id, label, case: c, expected }) => ({ id, label, case: clone(c), expected }));
     },
     async triage(caseObj) {
       const hit = recorded.get(canonical(caseObj));
@@ -248,6 +257,7 @@ function replaySource(bundle) {
         available: { fast: [bundle.models.fast], agent: [bundle.models.agent] },
       };
     },
+    async baseline() { return baselineOf(bundle); },
     /** Replay cannot switch models; it reports the ones the bundle was recorded with. */
     async setModels() {
       return this.models();
@@ -281,7 +291,7 @@ export async function detectSource(fetchImpl = globalThis.fetch, timeoutMs = 200
     probe.catch(() => {}); // a late failure after the timeout must not be unhandled
     const health = await Promise.race([probe, timeout]);
     if (health?.mode === 'live') {
-      const src = liveSource(fetchImpl, base, opts.store ?? tabStore());
+      const src = liveSource(fetchImpl, base, opts.store ?? tabStore(), opts);
       src.aihub = !!health.aihub;
       src.build = health.build;
       return src;

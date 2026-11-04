@@ -60,3 +60,14 @@ test('replayLabel: mock recordings are not called real', () => {
   assert.equal(replayLabel({ fast: 'Mock', agent: 'Gemini' }), 'Replay of a real run');
   assert.equal(replayLabel(null), 'Replay of a real run');
 });
+
+test('kpis scores only rows with an expected action', () => {
+  const k = kpis([
+    { expected: { action: 'resend' }, decision: { action: 'resend', decidedBy: 'fast', costUSD: 0, latencyMs: 10 } },
+    { decision: { action: 'escalate', decidedBy: 'agent', costUSD: 0, latencyMs: 30 } },
+  ]);
+  assert.equal(k.correct, 1);
+  assert.equal(k.scored, 1);
+  assert.equal(k.total, 2, 'the unlabelled row still counts for cost, time and fast share');
+  assert.equal(k.fastShare, 0.5);
+});

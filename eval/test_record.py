@@ -91,7 +91,7 @@ class RecordTest(unittest.TestCase):
         self.assertEqual(bundle["build"], "2026.3.0AI")
         self.assertEqual(bundle["models"], {"fast": "Jev", "agent": "Gemini"})
         self.assertEqual([s["id"] for s in bundle["scenarios"]], ["s0", "s1", "s2"])
-        self.assertEqual(set(bundle["scenarios"][0]), {"id", "label", "case", "decision"})
+        self.assertEqual(set(bundle["scenarios"][0]), {"id", "label", "case", "expected", "decision"})
         self.assertEqual(sleeps, [])
 
     def test_batches_of_five(self):
