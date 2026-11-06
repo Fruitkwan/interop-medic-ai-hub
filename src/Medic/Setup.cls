@@ -56,6 +56,8 @@ ClassMethod CreateReviewers() As %Status
 /// survives restarts.
 ClassMethod OnStart() As %Status
 {
+	// data/ is git-ignored, so a fresh clone mounts an empty folder.
+	for dir = "/data/in", "/data/done" { do ##class(%File).CreateDirectoryChain(dir) }
 	set password = $system.Util.GetEnviron("IRIS_PASSWORD")
 	if password = "" {
 		write "Interop Medic: IRIS_PASSWORD not set; accounts keep their current password (demo: "_..#DEMOPASSWORD_")", !

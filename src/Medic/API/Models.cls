@@ -113,7 +113,13 @@ ClassMethod OllamaLabel(pTier As %String) As %String
 	quit:..Ollama()="" ""
 	set model = $select(pTier = "fast": ..Env("OLLAMA_FAST_MODEL", "nimble-v3"), 1: $system.Util.GetEnviron("OLLAMA_AGENT_MODEL"))
 	quit:model="" ""
-	set t = $translate(model, "-_", "  ")
+	quit ..Pretty(model)
+}
+
+/// "nimble-v3" -> "Nimble v3".
+ClassMethod Pretty(pModel As %String) As %String
+{
+	set t = $translate(pModel, "-_", "  ")
 	quit $zconvert($extract(t), "U")_$extract(t, 2, *)
 }
 
@@ -122,6 +128,11 @@ ClassMethod Unavailable(pTier As %String) As %DynamicArray
 {
 	set out = []
 	quit:((pTier = "agent") && '##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent")) out
+	if pTier = "fast" {
+		// The server-side models: no visitor's key can turn these on.
+		if '..Has(..Available("fast"), "Jev") do out.%Push(..Greyed("Jev", "SYSTEMONE_BASE_URL and SYSTEMONE_API_KEY"))
+		if ..Ollama() = "" do out.%Push(..Greyed(..Pretty(..Env("OLLAMA_FAST_MODEL", "nimble-v3")), "OLLAMA_BASE_URL"))
+	}
 	set list = $select(pTier = "fast": ..FastModels(), 1: ..AgentModels())
 	set it = list.%GetIterator()
 	while it.%GetNext(, .m) {
@@ -134,6 +145,14 @@ ClassMethod Unavailable(pTier As %String) As %DynamicArray
 		do out.%Push(item)
 	}
 	quit out
+}
+
+/// An entry for a model only the server's configuration can turn on.
+ClassMethod Greyed(pLabel As %String, pNeed As %String) As %DynamicObject
+{
+	set item = {"label": (pLabel), "need": (pNeed), "provider": ""}
+	do item.%Set("keyable", 0, "boolean")
+	quit item
 }
 
 /// A model entry can run: a key on the server and, for the fast tier, an OpenAI-compatible URL.

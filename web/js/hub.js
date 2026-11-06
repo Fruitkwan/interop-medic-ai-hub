@@ -60,6 +60,11 @@ export function kpis(rows) {
   };
 }
 
+/** A tier's menu is worth opening: a second model to run, or greyed-out ones to show. */
+export function hasChoices(models, tier) {
+  return (models?.available?.[tier]?.length ?? 0) + (models?.unavailable?.[tier]?.length ?? 0) > 1;
+}
+
 /* ---------- Formatting ---------- */
 
 const FEATURED = ['endpoint_timeout', 'outage_critical_result', 'unknown_receiver', 'patient_mismatch'];
@@ -398,8 +403,8 @@ function renderKnobs() {
     const knob = $(`knob-${tier}`);
     const list = m?.available?.[tier] ?? [];
     knob.querySelector('.name').textContent = m?.[tier] ?? '…';
-    knob.disabled = state.busy || list.length < 2;
-    knob.title = list.length < 2
+    knob.disabled = state.busy || !hasChoices(m, tier);
+    knob.title = !hasChoices(m, tier)
       ? (state.src?.mode === 'live' ? `Only ${m?.[tier] ?? 'the mock'} is configured` : 'A replay cannot switch models')
       : `Switch the ${tier === 'fast' ? 'fast tier' : 'agent'} model (${list.join(', ')})`;
     // The Evidence Canvas has its own pair of buttons for the same menus.
@@ -420,7 +425,7 @@ function toggleModelMenu(tier, anchor = $(`knob-${tier}`)) {
   if (was === anchor.id) return;
   const m = state.models;
   const list = m?.available?.[tier] ?? [];
-  if (list.length < 2 || state.busy) return;
+  if (!hasChoices(m, tier) || state.busy) return;
   const knob = anchor;
   const items = list.map((name) => h('button', {
     type: 'button', role: 'menuitemradio', class: `opt${name === m[tier] ? ' on' : ''}`,
@@ -996,6 +1001,8 @@ async function boot() {
     $('notice').hidden = false;
   }
   try { state.models = await src.models(); } catch { state.models = null; }
+  $('mode-pill-text').textContent = src.mode === 'live' ? 'Live' : 'Replay';
+  $('mode-pill').classList.toggle('replay', src.mode !== 'live');
   $('about').textContent = describeSource(src);
   $('batch-btn').addEventListener('click', runBatch);
   $('builder').addEventListener('submit', runBuilt);

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Interop Medic</title>
   <meta name="description" content="Watch an AI Hub agent triage failed HL7 and FHIR messages, check the facts with its tools, and hand risky cases to a person.">
-  <link rel="stylesheet" href="css/hub.css?v=14">
-  <script type="module" src="js/hub.js?v=15"></script>
+  <link rel="stylesheet" href="css/hub.css?v=15">
+  <script type="module" src="js/hub.js?v=17"></script>
 </head>
 <body>
   <header class="top">
@@ -18,7 +18,7 @@
       <p class="lede">Triage failed HL7 and FHIR messages with AI you can trust. <span>A fast model answers first, an AI Hub agent checks the facts, and policy keeps a person in control.</span></p>
     </div>
     <div class="status-block">
-      <span class="live-pill"><i></i>Live</span>
+      <span class="live-pill" id="mode-pill"><i></i><b id="mode-pill-text">…</b></span>
       <p class="about" id="about"></p>
       <p class="notice" id="notice" role="status" hidden></p>
     </div>

@@ -78,6 +78,14 @@ Method TestChatFastReply()
 	do $$$AssertTrue(req.messages.%Get(1).content [ "Error: ")
 }
 
+Method TestGreyedServerModels()
+{
+	set item = ##class(Medic.API.Models).Greyed("Jev", "SYSTEMONE_API_KEY")
+	do $$$AssertEquals(item.label, "Jev")
+	do $$$AssertEquals(item.%Get("keyable"), 0, "no visitor's key turns on a server-side model")
+	do $$$AssertEquals(##class(Medic.API.Models).Pretty("nimble-v3"), "Nimble v3")
+}
+
 /// ollama:<model> entries need OLLAMA_BASE_URL and no key.
 Method TestOllamaEntriesNeedNoKey()
 {

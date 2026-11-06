@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stepRows, overruled, kpis, replayLabel } from '../js/hub.js';
+import { stepRows, overruled, kpis, replayLabel, hasChoices } from '../js/hub.js';
 
 const trace = [
   { stage: 'Jev', status: 'warn', value: 'resend 0.42', detail: 'Jev sees a timeout', ms: 300 },
@@ -70,4 +70,12 @@ test('kpis scores only rows with an expected action', () => {
   assert.equal(k.scored, 1);
   assert.equal(k.total, 2, 'the unlabelled row still counts for cost, time and fast share');
   assert.equal(k.fastShare, 0.5);
+});
+
+test('a menu opens on a fresh clone: only Mock runs, the rest are greyed out', () => {
+  const fresh = { available: { agent: ['Mock'] }, unavailable: { agent: [{ label: 'Claude' }] } };
+  assert.equal(hasChoices(fresh, 'agent'), true);
+  assert.equal(hasChoices({ available: { agent: ['Mock'] }, unavailable: { agent: [] } }, 'agent'), false);
+  assert.equal(hasChoices({ available: { fast: ['Jev'] } }, 'fast'), false, 'a replay has one recorded model');
+  assert.equal(hasChoices(null, 'fast'), false);
 });
