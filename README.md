@@ -1,58 +1,90 @@
 # Interop Medic
 
+An AI agent that triages failed HL7 v2 and FHIR messages in InterSystems IRIS Interoperability.
+For each errored or suspended message it decides one of **resend**, **fix and resend**,
+**reroute**, **quarantine** or **escalate**, with a confidence, a severity, a rationale and a
+proposed fix. A fast decision model answers first, an AI Hub agent checks the facts with read-only
+tools, a deterministic policy decides what may run alone, and a person reviews the rest.
+
 ## For judges: two minutes
 
-- **Public link:** `https://<user>.github.io/<repo>/` (published when the contest opens). It is a
-  static copy of the page that replays a recorded run.
-- **Local:** `docker compose up -d --build`, then open http://localhost:52773/medic/index.html. The
-  page needs no sign-in. The Management Portal uses `_SYSTEM` / `SYS`, or your `IRIS_PASSWORD`.
-- **What to click:** pick **Critical result**, watch the trace build, then **Approve**. Then
-  **Run a batch of 5**, and finally **+ Build your own** to write a message of your own.
-- **The labels:**
-  - **Live** means the page is talking to the running IRIS production.
-  - **Replay of a real run** means it is replaying a bundle (`web/data/bundle.json`) recorded with
-    real models, as on the public site; **Replay (mock models)** is the same for a bundle recorded
-    on the mocks.
-  - **Mock** means the models are the offline mocks.
-  - Downstream effects (resend, reroute and so on) are marked "(simulated)": nothing downstream exists.
-- **Real models:** Jev (fast tier) and Gemini via AI Hub (agent) need keys in `.env` and the AI Hub
-  build 154 image (see below). Without them everything runs on the mock models, offline.
-- **Safety:** the `/medic` web applications are unauthenticated, for a local demo only. Do not expose
-  port 52773.
+**1. Load the AI Hub image.** Download build 154 (`irishealth-community-2026.3.0AI.154.0-docker.tar.gz`)
+from the [EAP portal](https://evaluation.intersystems.com/Eval/early-access/AIHub), "AI Hub" program:
+
+```bash
+docker image load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+docker images
+docker tag <loaded image name> irishealth-community:2026.3.0AI.154.0
+```
+
+**2. Start it.** `.env` is optional: with none, every model runs from keys you paste into the page.
+
+```bash
+git clone https://github.com/Fruitkwan/interop-medic-ai-hub.git
+cd interop-medic-ai-hub
+cp .env.example .env
+IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0 docker compose up -d --build
+```
+
+**3. Check it works.**
+
+```bash
+curl http://localhost:52773/medic/api/health
+docker exec interop-medic iris session IRIS -U USER "##class(Medic.Setup).Doctor()"
+```
+
+`health` answers with `"aihub":true` on the right image. If ports 52773 or 1972 are taken, set
+`MEDIC_WEB_PORT` and `MEDIC_SS_PORT`.
+
+**4. Open** http://localhost:52773/medic/index.html (no sign-in; the Management Portal uses
+`_SYSTEM` / `SYS`, or your `IRIS_PASSWORD`).
+
+**5. Pick your models.** The **Fast** and **Agent** menus under the screen list every model (see
+[Models](#models)). Use **API keys** to paste your own key for any of them, or put it in `.env`.
+No key is needed for **Mock**, which runs offline.
+
+**6. What to click:** pick **Critical result**, watch the trace build, then **Approve**. Then
+**Run a batch of 5**, and finally **+ Build your own** to write a message of your own. The strip at
+the bottom shows a recorded run until you run something, then this session's numbers.
+
+**The labels:**
+
+- **Live** means the page is talking to the running IRIS production.
+- **Replay of a run** means it is replaying a bundle (`web/data/bundle.json`) recorded with real
+  models; **Replay (mock models)** is the same for a bundle recorded on the mocks.
+- **Mock** means the models are the offline mocks.
+- Downstream effects (resend, reroute and so on) are marked "(simulated)": nothing downstream exists.
+
+**Good to know:**
+
+- **Safety:** the `/medic` web applications are unauthenticated. Do not expose port 52773 to a
+  network without HTTPS and a look at [Judges' own keys](#judges-own-keys).
 - **The demo production** runs `Medic.Triage` with `DryRun` off, so auto-applied decisions show up on
   the page; every effect is still simulated. To turn it back on, set the `DryRun` setting of
   Medic.Triage (Policy group) in the production configuration.
-- **Tests:** `node --test "web/tests/*.test.mjs"` for the page, `uv run python -m unittest
-  eval/test_record.py` for the recorder.
-- **Re-recording the public bundle:**
+- **Without a server:** `uv run python -m http.server -d web 8090` serves the page alone, replaying
+  the bundle. The `Deploy web/ to GitHub Pages` workflow (`.github/workflows/pages.yml`) publishes
+  that copy; it is manual (`workflow_dispatch`) and runs the page tests first.
+- **Re-recording the bundle:**
 
   ```bash
-  uv run python eval/record.py --batches 3 --out web/data/bundle.json
+  uv run python eval/record.py --batches 3 --fast Jev --agent Gemini --out web/data/bundle.json
   ```
 
-  If any case is skipped (for example on a quota error), the recorder leaves the bundle untouched,
-  writes `bundle.partial.json` next to it and exits nonzero; `--allow-partial` overrides that. The committed bundle is a
-  real **Jev + Gemma** run (local Gemma through AI Hub): add `--fast` and `--agent` to pick other
-  models, and `--timeout 900` for a local model on a CPU.
-- **Publishing:** the `Deploy web/ to GitHub Pages` workflow (`.github/workflows/pages.yml`) is
-  manual (`workflow_dispatch`) and runs the page tests before it deploys `web/`.
+  Add `--timeout 900` for a local model on a CPU. If any case is skipped (for example on a quota
+  error), the recorder leaves the bundle untouched, writes `bundle.partial.json` next to it and exits
+  nonzero; `--allow-partial` overrides that.
 
-An agent that triages failed HL7 v2 and FHIR messages in InterSystems IRIS Interoperability.
-For each errored or suspended message it decides one of **resend**, **fix and resend**,
-**reroute**, **quarantine** or **escalate**, with a confidence, a severity, a rationale and a
-proposed fix.
-
-> **Status:** this runs fully offline with mock providers. The fast tier can call Jev or Laya. The
-> AI Hub agent (`Medic.AIHub.TriageAgent`) only compiles on the AI Hub Early Access build (154). It
-> has run there on real Gemini and Gemma: it escalated a critical result using
-> ValidateHL7/CheckEndpoint and SearchPrecedents. The bundled recording is a real Jev + Gemma run of
-> 16 scenarios and 15 random cases.
+> **Status:** the bundled recording is a real Jev + Gemma run of 16 scenarios and 15 random cases on
+> build 154: 24 of 31 decisions matched the expected action, and every case went on to the agent
+> (low confidence, high severity or a reroute). Gemma ran on a CPU, hence about 3.5 minutes a
+> decision; hosted agents took 15 to 36 seconds in our tests. Everything also runs offline on mocks.
 
 ## How it works
 
 ```
 Medic.DemoFeed ──> Medic.Triage (BPL) ──> Medic.Agent ──> Medic.FastTier
- (case files)       policy + dry run       │  1. ask the fast tier (Jev, Laya or mock)
+ (case files)       policy + dry run       │  1. ask the fast tier (a decision model)
                          │                 │  2. confident & low severity? accept it
                          │                 └  3. otherwise run the tool-using agent
                          └─ held for a person ──> Medic.Review ──> Medic.Reviewers
@@ -69,6 +101,7 @@ without a person. `DryRun` is covered in the judges section above and in the tab
 |---|---|---|
 | `ProviderClass` | Medic.FastTier | `MEDIC_FAST_PROVIDER`, else `Medic.Provider.JevMock` |
 | `ProviderClass` | Medic.Agent | `MEDIC_AGENT_PROVIDER`, else `Medic.Provider.AgentMock` |
+| `ReviewTarget` | Medic.Triage | `Medic.Review`; blank creates no Workflow tasks |
 | `FastConfidence`, `FastSeverityCeiling` | Medic.Agent | 0.85, 0.6 |
 | `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, off in the demo production (on in the class) |
 
@@ -79,8 +112,8 @@ which opens an IRIS **Workflow Engine** task for the role `Medic.Reviewers` (the
 `EnsLib.Workflow.Operation` item of that name; `_SYSTEM`, `SuperUser` and `Admin` are members).
 The task shows the proposed action, confidence, severity, rationale and fix, with the choices
 **Approve**, **Escalate** and **Quarantine**. Answer it in the Workflow inbox
-(`http://localhost:52773/csp/user/_DeepSee.UserPortal.Workflow.zen`, or Management Portal >
-Interoperability > Workflow > Workflow Inbox) and the answer goes through the same code as the
+(`http://localhost:52773/csp/user/_DeepSee.UserPortal.Workflow.zen`, signed in as one of those
+accounts) and the answer goes through the same code as the
 web page's buttons: the trace gets a person step, the audit trail a row and the precedent store
 the case. Whoever decides first wins; deciding on the page completes the task.
 
@@ -144,20 +177,11 @@ and `MEDIC_SS_PORT`.
 docker exec interop-medic iris session IRIS -U USER "##class(Medic.Setup).Doctor()"
 ```
 
-### With AI Hub (Early Access build 154)
+### With or without AI Hub
 
-AI Hub is only in the Early Access Community build. Download it from the
-[EAP portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) ("AI Hub" program),
-then load it, retag it and build with it:
-
-```bash
-docker image load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
-docker images
-docker tag <loaded image name> irishealth-community:2026.3.0AI.154.0
-IRIS_IMAGE=irishealth-community:2026.3.0AI.154.0 docker compose up -d --build
-```
-
-Without it, the default community image runs everything with the mock providers.
+The steps above run the AI Hub Early Access build, which this entry targets. Without `IRIS_IMAGE`,
+the default community image has no AI Hub: the production, the page and the fast tier still work,
+and the agent tier offers only Mock.
 
 ### Agent tier: the AI Hub agent
 
@@ -185,61 +209,122 @@ zero confidence rather than failing.
 The AI Hub classes are in `src-aihub/` and are compiled only when the image has `%AI.Agent`. The
 default community image skips them, and the mock agent is used.
 
-To use it, set `IRIS_IMAGE` to the build 154 image, then add to `.env`:
+To make a real agent the production's default (for the demo feed and `eval/run.py`, which do not
+go through the page's menus), set it in `.env`:
 
 ```bash
 MEDIC_AGENT_PROVIDER=Medic.Provider.AIHubAgent
-AIHUB_PROVIDER=openai
-AIHUB_MODEL=<model>
+AIHUB_PROVIDER=gemini
+AIHUB_MODEL=gemini-3.5-flash
 AIHUB_API_KEY=<key>
 ```
 
-### Choosing the agent's model
+## Models
 
-The agent's model switch on the web page lists every model in `MEDIC_AGENT_MODELS` whose key is
-configured, plus Mock and (with `OLLAMA_BASE_URL`) Ollama. Each entry is `Label=provider:model`;
-the provider is an AI Hub provider name (`gemini`, `openai`, `anthropic`, `xai`, `deepseek`, ... as
-listed by `##class(%AI.Provider).%GetProviders()`), and a blank model means the provider's default.
+Both tiers are chosen from the menus on the page. Each browser tab keeps its own choice, so people
+sharing a server never switch models for each other.
+
+### Fast tier: decision models
+
+The fast tier answers three typed questions in one call: the action (a choice), the severity (a
+score) and whether acting could attach data to the wrong patient (a yes/no probability). If that
+wrong-patient probability is 0.7 or higher, the decision is forced to escalate. If the model is
+down or replies badly, the case goes to the agent instead of failing.
+
+| Menu | Model | How it is called | What it needs |
+|---|---|---|---|
+| **Mock** | `Medic.Provider.JevMock` | in-process | nothing |
+| **Jev** | TypeSafe Jev, hosted | `POST /v1/systemone` | `SYSTEMONE_BASE_URL`, `SYSTEMONE_API_KEY`, `SYSTEMONE_MODEL` |
+| **Nimble v3** | `nimble-v3`, local | Ollama's `POST /v1/systemone` | `OLLAMA_BASE_URL` |
+| **Mercury Decide** | Inception `mercury-decide` | `POST /v1/decisions` (same request as System One) | `INCEPTION_API_KEY` |
+| **Mercury 2.5** | Inception `mercury-2.5` | `chat/completions`, JSON mode | `INCEPTION_API_KEY` |
+| **Laya** (optional) | Laya, open weights | `POST /v1/systemone` | `LAYA_BASE_URL` |
+
+`Medic.Provider.SystemOne` handles every System One style API, with the path in the `Endpoint`
+setting of `Medic.FastTier`. `Medic.Provider.ChatFast` asks a chat model the same three questions and
+applies the same guardrail. Hosted fast models are listed in `MEDIC_FAST_MODELS`; a model id
+containing `decide` uses the decisions API, any other a chat model:
 
 ```bash
-MEDIC_AGENT_MODELS=Gemini=gemini:gemini-3.5-flash,GPT=openai:gpt-5-mini,Claude=anthropic:claude-sonnet-5-5,Grok=xai:grok-4
-GEMINI_API_KEY=<key>
-OPENAI_API_KEY=<key>
-ANTHROPIC_API_KEY=<key>
-XAI_API_KEY=<key>
+MEDIC_FAST_MODELS=Mercury Decide=inception:mercury-decide,Mercury 2.5=inception:mercury-2.5
 ```
 
-Keys stay on the server. For each provider the agent takes the key from IRIS Interoperability
-credentials named `Medic.<provider>` (e.g. `Medic.anthropic`, key in the Password field) if they
-exist, else `<PROVIDER>_API_KEY`, else the variable AI Hub names for that provider (`GOOGLE_API_KEY`
-for gemini), else `AIHUB_API_KEY` when the provider is `AIHUB_PROVIDER`. Entries with no key are
-not shown.
+A 429 from a hosted model is retried once, after its `Retry-After` (at most 5 s); then the case goes
+to the agent. Confidence from different models is not comparable, so re-run the eval after
+switching: the auto-apply threshold is fitted per model.
 
-OpenRouter is one of AI Hub's providers, so its models need only `OPENROUTER_API_KEY` and entries
-such as `Kimi=openrouter:moonshotai/kimi-k2` (the model is OpenRouter's slug). Any other
-OpenAI-compatible API works under a name AI Hub does not know, with `<NAME>_BASE_URL` and
-`<NAME>_API_KEY`: for Inception, `Mercury=inception:mercury-2.5`,
-`INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/` and `INCEPTION_API_KEY`. The container reads
-every `.env` variable, so new keys need no change to `docker-compose.yml`.
+To make one the production's default (for the demo feed and `eval/run.py`), set it in `.env`:
 
-Local Ollama models go in the same list with the provider `ollama` and need no key, only
-`OLLAMA_BASE_URL`: `Gemma=ollama:gemma4,Qwen=ollama:qwen3.8`.
+| Default | `.env` |
+|---|---|
+| Mock (offline) | nothing |
+| Jev (hosted) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=https://api.typesafe.ai`<br>`SYSTEMONE_API_KEY=...`<br>`SYSTEMONE_MODEL=jev-latest` (required)<br>`SYSTEMONE_PRICE_PER_MTOK=0.042` |
+| Local Laya (`laya-serve`, or `ollaya` on 11435) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=http://host.docker.internal:8000`<br>`SYSTEMONE_PRICE_PER_MTOK=0` |
 
-Models listed without a key still appear on the page, greyed out, with the variable to add.
+`SYSTEMONE_MODEL` picks a Laya checkpoint (`english`, `multilingual`, `typed-decisions`). The same
+values can be set on `Medic.FastTier` in the Management Portal, with the key stored as
+Interoperability credentials; portal settings take precedence over env vars. Run Laya locally with
+`pip install "laya[serve]"` then `laya-serve`. To check the plumbing without a model, run
+`uv run python eval/fake_systemone.py` and point `SYSTEMONE_BASE_URL` at
+`http://host.docker.internal:8765`.
+
+### Agent: AI Hub models
+
+Every agent model runs through AI Hub's `%AI.Agent` with the same read-only tools.
+
+| Menu | Provider and model | Key | Run on build 154 |
+|---|---|---|---|
+| **Mock** | `Medic.Provider.AgentMock` | none | yes |
+| **Gemini** | `gemini:gemini-3.5-flash` | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | yes |
+| **Mercury 2.5** | `inception:mercury-2.5` | `INCEPTION_API_KEY` | yes |
+| **Gemma** | `ollama:gemma4`, local | none; `OLLAMA_BASE_URL` | yes (recorded run) |
+| **Qwen** | `ollama:qwen3.8`, local | none; `OLLAMA_BASE_URL` | did not finish on a CPU in 15 minutes; needs a GPU |
+| **Claude** | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` | reached Anthropic; no full run without a key |
+| **ChatGPT** | `openai:gpt-5.4` | `OPENAI_API_KEY` | not yet, no key |
+| **Grok** | `xai:grok-4.5` | `XAI_API_KEY` | not yet, no key |
+
+InterSystems lists OpenAI, Anthropic, Gemini and Bedrock as supported on this build, and xAI,
+OpenRouter and Ollama as experimental. Inception runs through AI Hub's OpenAI-compatible path.
+
+These lists are the defaults in `docker-compose.yml`. Set `MEDIC_AGENT_MODELS` (or
+`MEDIC_FAST_MODELS`) in `.env` to replace one. Each entry is `Label=provider:model`; a blank model
+means the provider's default, and the providers are those of
+`##class(%AI.Provider).%GetProviders()`.
+
+- **OpenRouter:** set `OPENROUTER_API_KEY` and add entries such as
+  `Kimi=openrouter:moonshotai/kimi-k2` (the model is OpenRouter's slug).
+- **Any other OpenAI-compatible API:** use a name AI Hub does not know, with `<NAME>_BASE_URL` and
+  `<NAME>_API_KEY`, as `inception` does with `INCEPTION_BASE_URL=https://api.inceptionlabs.ai/v1/`.
+- **Local Ollama models:** use the provider `ollama`, with `OLLAMA_BASE_URL` and no key.
+
+The container reads every `.env` variable, so new keys need no change to `docker-compose.yml`.
+
+### Keys
+
+A listed model with no key stays on the menu, greyed out, until it has one. Keys come from, in order:
+
+1. the visitor's own key, typed into the page ([below](#judges-own-keys));
+2. IRIS Interoperability credentials named `Medic.<provider>` (e.g. `Medic.anthropic`, key in the
+   Password field);
+3. `<PROVIDER>_API_KEY` in `.env`, or the variable AI Hub names for that provider (`GOOGLE_API_KEY`
+   for gemini);
+4. `AIHUB_API_KEY`, when the provider is `AIHUB_PROVIDER`.
+
+Keys never go into host settings. Cost tracking uses `SYSTEMONE_PRICE_PER_MTOK` on the fast tier
+and one `AIHUB_PRICE_*` pair for all agent models.
 
 ### Judges' own keys
 
 The page's **API keys** button lets each visitor paste their own key for any hosted model the
-server lists (Claude, ChatGPT, Grok, Gemini, Mercury, OpenRouter models, ...). A greyed-out model
-turns on once its provider has a key, and a visitor's key replaces the server's for their calls.
+server lists. A greyed-out model turns on once its provider has a key, and a visitor's key replaces
+the server's for their calls.
 
 - The key stays in that browser tab (`sessionStorage`); closing the tab forgets it.
 - Each triage sends only the keys its chosen models need. The server keeps them in
   `^IRIS.Temp.MedicKeys` (IRISTEMP: never journaled, cleared on restart) under a one-time token for
   that request only, and drops them when it ends. Messages carry the token, never the key, and any
   key a provider echoes in an error is replaced with `***` before the decision is stored.
-- Each tab also picks its own models, sent with every triage, so judges sharing one server never
-  switch models for each other. `POST /models` still sets the server's default.
+- Each tab sends its model labels with every triage. `POST /models` still sets the server's default.
 - The browser can choose a model and send a key, never a URL: endpoints come from the server's
   configuration only.
 
@@ -248,73 +333,29 @@ terminate TLS for you), or keys cross the network in clear text. The API has no 
 with the URL can also spend the keys in the server's `.env`: on a public host, leave hosted keys out
 of `.env` and let judges bring their own, or put the app behind authentication.
 
-The fast tier can also run a fast chat model, such as Inception's Mercury, through
-`Medic.Provider.ChatFast`: one JSON-mode call to an OpenAI-compatible `chat/completions` endpoint
-asks the same three questions as System One, with the same wrong-patient guardrail. List them in
-`MEDIC_FAST_MODELS`, in the same format and with the same keys:
-
-```bash
-MEDIC_FAST_MODELS=Mercury 2.5=inception:mercury-2.5
-```
-
-The switch sends only the label; it sets `LLMProvider`, `LLMModel`, `LLMBaseURL` and `LLMCredentials`
-(the credentials name, never the key) on `Medic.Agent`. Without `MEDIC_AGENT_MODELS` the switch
-offers the one `AIHUB_PROVIDER` / `AIHUB_MODEL` model. Cost tracking uses one
-`AIHUB_PRICE_*` pair for all of them.
-
-### Fast tier: mock, Jev or Laya
-
-Jev (TypeSafe) and Laya (open weights, Apache 2.0) use the same `POST /v1/systemone` API, so one
-provider, `Medic.Provider.SystemOne`, handles both. It sends one request per message with three
-typed questions:
-
-- the action (a choice),
-- the severity (a score), and
-- whether acting could attach data to the wrong patient (a yes/no probability).
-
-If that wrong-patient probability is 0.7 or higher, the decision is forced to escalate. If the
-server is down or replies badly, the case goes to the agent instead of failing.
-
-Put the settings in `.env` (copied from `.env.example`, git-ignored):
-
-| Fast tier | `.env` |
-|---|---|
-| Mock (default, offline) | nothing |
-| Local Laya (`laya-serve`, or `ollaya` on 11435) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=http://host.docker.internal:8000`<br>`SYSTEMONE_PRICE_PER_MTOK=0` |
-| Jev (hosted) | `MEDIC_FAST_PROVIDER=Medic.Provider.SystemOne`<br>`SYSTEMONE_BASE_URL=https://api.typesafe.ai`<br>`SYSTEMONE_API_KEY=...`<br>`SYSTEMONE_MODEL=jev-latest` (required)<br>`SYSTEMONE_PRICE_PER_MTOK=0.042` |
-
-`SYSTEMONE_MODEL` picks a Laya checkpoint (`english`, `multilingual`, `typed-decisions`). The same
-values can be set on `Medic.FastTier` in the Management Portal, with the key stored as
-Interoperability credentials; portal settings take precedence over env vars.
-
-Run Laya locally with `pip install "laya[serve]"` then `laya-serve`. See the upstream docs for GPU
-and Docker options.
-
-To check the plumbing without either model, run `uv run python eval/fake_systemone.py` and point
-`SYSTEMONE_BASE_URL` at `http://host.docker.internal:8765`.
-
-Confidence from different models is not comparable, so re-run the eval after switching. The
-auto-apply threshold is fitted per model.
-
 ### Local models with Ollama
 
-Ollama serves both tiers on your own machine, with no API keys:
+Ollama serves both tiers on your own machine, with no API keys. Pull the models, then set:
 
-- **Fast tier:** a decision model such as `nimble-v3` answers Ollama's `POST /v1/systemone`, the same API as Jev, so `Medic.Provider.SystemOne` uses it unchanged.
-- **Agent:** any tool-calling chat model, such as `gemma4`, runs through AI Hub's `openai` provider pointed at Ollama's OpenAI-compatible `/v1`.
-
-```
+```bash
 OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_FAST_MODEL=nimble-v3      # default
-OLLAMA_AGENT_MODEL=gemma4        # optional (agent); qwen3.8 (27B) needs a GPU: on a CPU it outlasts AI Hub's request timeout
+OLLAMA_FAST_MODEL=nimble-v3
 ```
 
-The fast tier's model switch then offers the model by name ("Nimble v3"); the agent's offers its
-model only when `OLLAMA_AGENT_MODEL` is set. On a CPU-only machine a call can take minutes. The fast tier waits up to `OLLAMA_TIMEOUT` seconds (default 600), and the image raises the web gateway's response timeout to 900 s. The same values can be set by hand on `Medic.Agent` (LLMProvider `openai`, LLMModel, LLMBaseURL `http://host.docker.internal:11434/v1/`). Hosted providers that need a key (`openai`, `anthropic`, `xai`, ...) go through `MEDIC_AGENT_MODELS` (see "Choosing the agent's model") or `AIHUB_PROVIDER`, `AIHUB_MODEL` and `AIHUB_API_KEY`.
+- **Fast tier:** a decision model such as `nimble-v3` answers Ollama's `POST /v1/systemone`, the same
+  API as Jev. The menu shows it by name.
+- **Agent:** any tool-calling chat model, listed as `ollama:<model>`, runs through AI Hub's `openai`
+  provider pointed at Ollama's `/v1`.
+
+On a CPU-only machine a call can take minutes: Gemma took about 3.5 minutes a decision here.
+`qwen3.8` (27B) needs a GPU: on a CPU it had not finished when the web gateway gave up at 900 s
+(`OLLAMA_TIMEOUT` is 600 s per model call by default, and a run makes several). The single
+`Medic.Agent` job stays busy until the run ends, so other messages wait behind it; restart the
+container to clear one that is stuck.
 
 ### Web page and REST API
 
-The image serves a static page at `http://localhost:52773/medic/index.html` (this IRIS build has no default-page setting, so the bare `/medic/` is a 404) and a same-origin REST API at `/medic/api` (health, scenarios, random cases, triage, approve/override, model switch). Both web applications are unauthenticated with role `%All`: this is a local demo, do not expose the container to a network. `LAYA_BASE_URL` (optional) adds a "Laya" choice to the fast-tier model switch. API tests: `uv run python -m unittest tests/test_api.py -v`.
+The image serves a static page at `http://localhost:52773/medic/index.html` (this IRIS build has no default-page setting, so the bare `/medic/` is a 404) and a same-origin REST API at `/medic/api` (health, scenarios, random cases, triage, approve/override, models). Both web applications are unauthenticated with role `%All`: see [Judges' own keys](#judges-own-keys) before exposing the container to a network. API tests: `uv run python -m unittest tests/test_api.py -v`.
 
 ## Eval
 
@@ -338,13 +379,14 @@ latency and estimated cost, and an **auto-apply threshold with a guarantee**:
 With the mock providers the pipeline scores 100% and the mock fast tier alone 64.7%, because the
 mock fast tier can't see context: critical results during outages, ambiguous dates, and receivers
 that don't resolve to a route. These numbers only show the harness works, since the mocks were
-written knowing the labels. Real numbers come from re-running with Jev or Laya and the AI Hub agent.
+written knowing the labels. Real numbers come from re-running with real models on both tiers.
 
 Tests:
 
 ```bash
-uv run python -m unittest eval/test_score.py dataset/test_generate.py
-docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Review","","")'
+uv run python -m unittest eval/test_score.py eval/test_record.py dataset/test_generate.py tests/test_api.py
+node --test "web/tests/*.test.mjs"
+docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Actions","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Trace","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Review","","")'
 ```
 
 ## Dataset
