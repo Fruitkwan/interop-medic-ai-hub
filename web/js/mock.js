@@ -6,6 +6,7 @@
 const FAST_CONFIDENCE = 0.85; // Agent gate: minimum fast confidence to trust it
 const FAST_SEVERITY_CEILING = 0.6; // Agent gate: at or above this the agent always runs
 const AUTO_APPLY_THRESHOLD = 0.9; // AutoApply: dry run is off in the page
+const AUTO_APPLY_MAX_SEVERITY = 0.6; // AutoApply: at or above this, a person decides
 const GE = '≥';
 
 let counter = 0;
@@ -166,11 +167,12 @@ export function mockDecide(caseObj) {
   }
 
   // Medic.Policy.AutoApply with the dry run off.
-  const autoApplied = final.action !== 'escalate' && final.confidence >= AUTO_APPLY_THRESHOLD;
+  const autoApplied = final.action !== 'escalate' && final.confidence >= AUTO_APPLY_THRESHOLD
+    && final.severity < AUTO_APPLY_MAX_SEVERITY;
   trace.push({
     stage: 'Policy', status: autoApplied ? 'ok' : 'warn',
     value: autoApplied ? 'auto-apply' : 'held for a person',
-    detail: `threshold ${num(AUTO_APPLY_THRESHOLD)}`, ms: 0,
+    detail: `threshold ${num(AUTO_APPLY_THRESHOLD)}, severity limit ${num(AUTO_APPLY_MAX_SEVERITY)}`, ms: 0,
   });
 
   counter += 1;

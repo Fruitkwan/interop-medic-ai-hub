@@ -6,6 +6,19 @@ For each errored or suspended message it decides one of **resend**, **fix and re
 proposed fix. A fast decision model answers first, an AI Hub agent checks the facts with read-only
 tools, a deterministic policy decides what may run alone, and a person reviews the rest.
 
+## See it first
+
+Both clips are the page replaying the bundled recording (Jev + Gemma), sped up.
+
+A critical result during an outage. Gemma answers resend at full confidence, and the severity limit
+holds it for a person anyway:
+
+![Replay of the critical result case: the agent says resend, the policy holds it for a person](docs/media/replay-critical-result.gif)
+
+A batch of five, scored against the expected actions:
+
+![Replay of a batch of five cases with the score strip and batch table](docs/media/replay-batch.gif)
+
 ## For judges: two minutes
 
 **1. Load the AI Hub image.** Download build 154 (`irishealth-community-2026.3.0AI.154.0-docker.tar.gz`)
@@ -76,9 +89,15 @@ the bottom shows a recorded run until you run something, then this session's num
   nonzero; `--allow-partial` overrides that.
 
 > **Status:** the bundled recording is a real Jev + Gemma run of 16 scenarios and 15 random cases on
-> build 154: 24 of 31 decisions matched the expected action, and every case went on to the agent
-> (low confidence, high severity or a reroute). Gemma ran on a CPU, hence about 3.5 minutes a
-> decision; hosted agents took 15 to 36 seconds in our tests. Everything also runs offline on mocks.
+> build 154, from an empty precedent store: 19 of 31 decisions matched the expected action, and every
+> case went on to the agent (low confidence, high severity or a reroute). The policy applied 3 on
+> its own and held 28 for a person, 17 of them correct. Eight wrong decisions were confident enough
+> to run alone; the severity limit held 7, including two critical results and a patient mismatch.
+> One got through: an unknown receiver "fixed" instead of rerouted, rated severity 0.5. The limit
+> relies on the model's own severity score, and 0.9 and 0.6 are defaults, not values fitted for Gemma.
+> Keep `DryRun` on (the class default) until you have fitted them for your model. Gemma ran on a CPU,
+> hence about 3 minutes a decision; hosted agents took 15 to 36 seconds in our tests. Scores vary
+> between runs: the previous clean run scored 23 of 31. Everything also runs offline on mocks.
 
 ## How it works
 
@@ -103,7 +122,7 @@ without a person. `DryRun` is covered in the judges section above and in the tab
 | `ProviderClass` | Medic.Agent | `MEDIC_AGENT_PROVIDER`, else `Medic.Provider.AgentMock` |
 | `ReviewTarget` | Medic.Triage | `Medic.Review`; blank creates no Workflow tasks |
 | `FastConfidence`, `FastSeverityCeiling` | Medic.Agent | 0.85, 0.6 |
-| `AutoApplyThreshold`, `DryRun` | Medic.Triage | 0.9, off in the demo production (on in the class) |
+| `AutoApplyThreshold`, `AutoApplyMaxSeverity`, `DryRun` | Medic.Triage | 0.9, 0.6, off in the demo production (on in the class) |
 
 ### Held decisions become Workflow tasks
 
@@ -347,7 +366,7 @@ OLLAMA_FAST_MODEL=nimble-v3
 - **Agent:** any tool-calling chat model, listed as `ollama:<model>`, runs through AI Hub's `openai`
   provider pointed at Ollama's `/v1`.
 
-On a CPU-only machine a call can take minutes: Gemma took about 3.5 minutes a decision here.
+On a CPU-only machine a call can take minutes: Gemma took about 3 minutes a decision here.
 `qwen3.8` (27B) needs a GPU: on a CPU it had not finished when the web gateway gave up at 900 s
 (`OLLAMA_TIMEOUT` is 600 s per model call by default, and a run makes several). The single
 `Medic.Agent` job stays busy until the run ends, so other messages wait behind it; restart the
@@ -374,7 +393,7 @@ latency and estimated cost, and an **auto-apply threshold with a guarantee**:
 - With probability at least 1 − δ (default 90%), auto-applied decisions are wrong at most α of
   the time.
 - The threshold is then checked on the held-out test split.
-- Escalations are never auto-applied.
+- Escalations are never auto-applied, and neither is anything at or above `AutoApplyMaxSeverity`.
 
 With the mock providers the pipeline scores 100% and the mock fast tier alone 64.7%, because the
 mock fast tier can't see context: critical results during outages, ambiguous dates, and receivers
@@ -386,7 +405,7 @@ Tests:
 ```bash
 uv run python -m unittest eval/test_score.py eval/test_record.py dataset/test_generate.py tests/test_api.py
 node --test "web/tests/*.test.mjs"
-docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Actions","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Trace","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Review","","")'
+docker exec -i interop-medic iris session IRIS -U USER <<< 'set ^UnitTestRoot="/tmp" do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.SystemOne","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.AIHubAgent","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Models","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Actions","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Trace","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Policy","","") do ##class(%UnitTest.Manager).DebugRunTestCase("","Medic.Test.Review","","")'
 ```
 
 ## Dataset
