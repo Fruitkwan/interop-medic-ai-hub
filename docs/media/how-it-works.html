@@ -1,0 +1,173 @@
+<!doctype html>
+<!-- Source of docs/media/how-it-works.png. Render it 1600 px wide at 2x in headless Chrome and
+     screenshot the body. Keep it in step with Medic.Process.Triage, Medic.Operation.Agent and
+     Medic.Policy.AutoApply. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Interop Medic: how it works</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f7f6; --card: #ffffff; --ink: #14302a; --muted: #5b736d; --line: #cfdcd7;
+  --teal: #1c6b58; --teal-soft: #e3f1ec; --ai: #2f5aa8; --ai-soft: #e7eefb;
+  --amber: #b26a00; --red: #b23a3a;
+  --sans: "IBM Plex Sans", "Segoe UI", sans-serif; --mono: "IBM Plex Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+body { width: 1600px; background: var(--bg); color: var(--ink); font: 400 17px/1.4 var(--sans); padding: 44px 48px 40px; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 17px; margin-top: 4px; }
+.stage { position: relative; display: grid; grid-template-columns: 230px 1fr 330px 300px; gap: 56px; margin-top: 34px; align-items: start; }
+svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 2px rgba(20,48,42,.06); }
+.eyebrow { font: 600 12px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.title { font-size: 20px; font-weight: 600; margin-top: 4px; }
+.mono { font-family: var(--mono); font-size: 14px; color: var(--muted); }
+.note { color: var(--muted); font-size: 15px; margin-top: 8px; }
+.group { position: relative; border: 2px dashed var(--line); border-radius: 18px; padding: 16px 18px 20px; display: grid; gap: 22px; }
+.group > .eyebrow { margin-bottom: -8px; }
+.fast { border-left: 5px solid var(--teal); }
+.gate { background: var(--teal-soft); border-color: #b9d9cd; }
+.gate ul, .policy ul { list-style: none; padding: 0; margin-top: 10px; display: grid; gap: 7px; font-size: 15.5px; }
+.gate li::before, .policy li::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin: 0 10px 2px 2px; opacity: .55; }
+.agent { border-left: 5px solid var(--ai); }
+.agent .title { color: var(--ai); }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { font: 500 13.5px var(--mono); background: var(--ai-soft); color: var(--ai); border-radius: 999px; padding: 4px 11px; }
+.chip.lock { background: transparent; border: 1px solid #c7d4ee; }
+.policy { border-left: 5px solid var(--amber); }
+.policy .hold { color: var(--red); font-weight: 600; }
+.policy .go { color: var(--teal); font-weight: 600; }
+.right { display: grid; gap: 26px; }
+.auto { border-left: 5px solid var(--teal); }
+.person { border-left: 5px solid var(--red); }
+.person .actions { display: flex; gap: 8px; margin-top: 10px; }
+.btn { font: 600 13.5px var(--sans); border-radius: 7px; padding: 5px 11px; background: var(--teal); color: #fff; }
+.btn.alt { background: transparent; color: var(--teal); border: 1px solid var(--teal); }
+.store { border-left: 5px solid var(--ai); }
+.label { position: absolute; font: 600 13px var(--sans); color: var(--muted); background: var(--bg); padding: 1px 7px; border-radius: 6px; white-space: nowrap; }
+.trace { margin-top: 64px; display: flex; gap: 18px; align-items: center; background: var(--ink); color: #e4efeb; border-radius: 14px; padding: 16px 22px; font-size: 16px; }
+.trace b { color: #fff; }
+.trace .mono { color: #a9c4bc; }
+</style>
+</head>
+<body>
+<h1>How Interop Medic triages a failed message</h1>
+<p class="sub">Inside one IRIS Interoperability production. The models suggest; plain ObjectScript decides what may run alone.</p>
+
+<div class="stage" id="stage">
+  <svg class="wires" id="wires" aria-hidden="true"></svg>
+
+  <div class="card" id="msg" style="margin-top:120px">
+    <div class="eyebrow">Failed message</div>
+    <div class="title">HL7 v2 or FHIR</div>
+    <p class="note">Errored or suspended, with its error text, routing table and endpoint state.</p>
+    <p class="mono" style="margin-top:10px">Medic.Triage (BPL)</p>
+  </div>
+
+  <div class="group" id="agentgroup">
+    <div class="eyebrow">Medic.Agent</div>
+    <div class="card fast" id="fast">
+      <div class="eyebrow">1 · Fast tier</div>
+      <div class="title">Decision model answers first</div>
+      <p class="note">Jev, Nimble or Mercury: an action, a confidence and a severity.</p>
+    </div>
+    <div class="card gate" id="gate">
+      <div class="eyebrow">2 · Gate</div>
+      <div class="title">Can the fast answer stand?</div>
+      <p class="note">Yes: it goes straight to the policy. No: the agent runs.</p>
+      <ul>
+        <li>confidence ≥ 0.85</li>
+        <li>severity &lt; 0.6</li>
+        <li>not a reroute (only tools can name a target)</li>
+      </ul>
+    </div>
+    <div class="card agent" id="agent">
+      <div class="eyebrow">3 · Otherwise</div>
+      <div class="title">AI Hub %AI.Agent checks the facts</div>
+      <p class="note">Gemini, Claude, ChatGPT, Grok, Mercury, or Gemma and Qwen locally. The fast answer is a hint.</p>
+      <div class="tools">
+        <span class="chip">SearchPrecedents</span><span class="chip">ValidateHL7</span>
+        <span class="chip">GetRoutingRule</span><span class="chip">ClosestRoute</span><span class="chip">CheckEndpoint</span>
+        <span class="chip lock">read-only policy</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card policy" id="policy" style="margin-top:150px">
+    <div class="eyebrow">4 · Policy · Medic.Policy.AutoApply</div>
+    <div class="title">May it run alone?</div>
+    <ul>
+      <li class="hold">escalate → hold</li>
+      <li class="hold">severity ≥ 0.6 → hold</li>
+      <li class="hold">confidence &lt; 0.9 → hold</li>
+      <li class="hold">dry run → hold</li>
+      <li class="go">otherwise → apply</li>
+    </ul>
+    <p class="note">No model involved. The limits are production settings.</p>
+  </div>
+
+  <div class="right">
+    <div class="card auto" id="auto">
+      <div class="eyebrow">Applied alone</div>
+      <div class="title">Resend, fix, reroute, quarantine</div>
+      <p class="note">Simulated in the demo: nothing downstream exists.</p>
+    </div>
+    <div class="card person" id="person">
+      <div class="eyebrow">5 · Held for a person</div>
+      <div class="title">Workflow task for Medic.Reviewers</div>
+      <p class="note">Answer in the IRIS Workflow inbox or on the page. Whoever decides first wins.</p>
+      <div class="actions"><span class="btn">Approve</span><span class="btn alt">Escalate</span><span class="btn alt">Quarantine</span></div>
+    </div>
+    <div class="card store" id="store">
+      <div class="eyebrow">Memory</div>
+      <div class="title">Audit trail and precedents</div>
+      <p class="note">Each case a person decides goes into an IRIS Vector Search store that the agent searches next time.</p>
+    </div>
+  </div>
+</div>
+
+<div class="trace">
+  <b>Every step is a message.</b>
+  <span>The Visual Trace of one failed message shows the model, tokens, cost, prompt, raw reply and each tool call,</span>
+  <span class="mono">with no external tracing service</span>
+</div>
+
+<script>
+// Draw the connecting arrows from the laid-out boxes.
+const stage = document.getElementById('stage');
+const svg = document.getElementById('wires');
+const NS = 'http://www.w3.org/2000/svg';
+const box = (id) => { const r = document.getElementById(id).getBoundingClientRect(), s = stage.getBoundingClientRect(); return { l: r.left - s.left, r: r.right - s.left, t: r.top - s.top, b: r.bottom - s.top, cx: (r.left + r.right) / 2 - s.left, cy: (r.top + r.bottom) / 2 - s.top }; };
+function draw() {
+  svg.innerHTML = `<defs>${['teal', 'ai', 'red'].map((c) => `<marker id="m-${c}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--${c})"/></marker>`).join('')}</defs>`;
+  stage.querySelectorAll('.label').forEach((el) => el.remove());
+  const wire = (d, color, dash, label, lx, ly) => {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', `var(--${color})`);
+    p.setAttribute('stroke-width', '2.4'); p.setAttribute('marker-end', `url(#m-${color})`);
+    if (dash) p.setAttribute('stroke-dasharray', '6 6');
+    svg.appendChild(p);
+    if (label) { const el = document.createElement('span'); el.className = 'label'; el.textContent = label; el.style.left = lx + 'px'; el.style.top = ly + 'px'; stage.appendChild(el); }
+  };
+  const msg = box('msg'), fast = box('fast'), gate = box('gate'), agent = box('agent'), pol = box('policy'), auto = box('auto'), per = box('person'), store = box('store'), grp = box('agentgroup');
+  wire(`M${msg.r},${msg.cy} C${msg.r + 40},${msg.cy} ${fast.l - 60},${fast.cy} ${fast.l - 2},${fast.cy}`, 'teal');
+  wire(`M${fast.cx},${fast.b} L${gate.cx},${gate.t - 2}`, 'teal');
+  wire(`M${gate.cx},${gate.b} L${agent.cx},${agent.t - 2}`, 'ai', false, 'no', gate.cx + 10, gate.b + 1);
+  wire(`M${gate.r},${gate.cy} C${grp.r + 30},${gate.cy} ${pol.l - 50},${pol.t + 40} ${pol.l - 2},${pol.t + 40}`, 'teal', false, 'yes', gate.r + 4, gate.cy - 30);
+  wire(`M${agent.r},${agent.cy} C${grp.r + 30},${agent.cy} ${pol.l - 50},${pol.b - 40} ${pol.l - 2},${pol.b - 40}`, 'ai', false, 'agent decision', grp.r - 10, agent.cy + 8);
+  wire(`M${pol.r},${pol.t + 60} C${pol.r + 30},${pol.t + 60} ${auto.l - 30},${auto.cy} ${auto.l - 2},${auto.cy}`, 'teal', false, 'apply', pol.r + 4, pol.t + 32);
+  wire(`M${pol.r},${pol.b - 60} C${pol.r + 30},${pol.b - 60} ${per.l - 30},${per.cy} ${per.l - 2},${per.cy}`, 'red', false, 'hold', pol.r + 8, pol.b - 52);
+  wire(`M${per.cx},${per.b} L${store.cx},${store.t - 2}`, 'red');
+  wire(`M${store.l},${store.cy} C${store.l - 120},${store.cy} ${agent.cx + 120},${agent.b + 120} ${agent.cx},${agent.b + 2}`, 'ai', true);
+  // Label the dashed return arrow at its middle, just above the line.
+  const back = svg.lastElementChild, mid = back.getPointAtLength(back.getTotalLength() / 2);
+  const tag = document.createElement('span'); tag.className = 'label'; tag.textContent = 'cited next time (SearchPrecedents)';
+  stage.appendChild(tag); tag.style.left = (mid.x - tag.offsetWidth / 2) + 'px'; tag.style.top = (mid.y - 30) + 'px';
+  document.body.dataset.ready = '1';
+}
+document.fonts.ready.then(draw);
+</script>
+</body>
+</html>

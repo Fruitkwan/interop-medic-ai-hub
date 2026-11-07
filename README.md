@@ -8,6 +8,10 @@ tools, a deterministic policy decides what may run alone, and a person reviews t
 
 ## See it first
 
+**[Try the replay in your browser](https://fruitkwan.github.io/interop-medic-ai-hub/)**, with nothing
+to install. It replays the bundled recording; anything not in the recording is decided by mock models
+in your browser, and the page says so. For the real pipeline, run the container below.
+
 Both clips are the page replaying the bundled recording (Jev + Gemma), sped up.
 
 A critical result during an outage. Gemma answers resend at full confidence, and the severity limit
@@ -101,14 +105,7 @@ the bottom shows a recorded run until you run something, then this session's num
 
 ## How it works
 
-```
-Medic.DemoFeed ──> Medic.Triage (BPL) ──> Medic.Agent ──> Medic.FastTier
- (case files)       policy + dry run       │  1. ask the fast tier (a decision model)
-                         │                 │  2. confident & low severity? accept it
-                         │                 └  3. otherwise run the tool-using agent
-                         └─ held for a person ──> Medic.Review ──> Medic.Reviewers
-                                                  (Workflow task in the IRIS Workflow inbox)
-```
+![How Interop Medic triages a failed message: a fast decision model answers first, a gate decides whether its answer stands, otherwise an AI Hub agent checks the facts with read-only tools; a deterministic policy then applies the decision or holds it for a person as a Workflow task, and decided cases become precedents the agent searches next time](docs/media/how-it-works.png)
 
 Every decision goes through `Medic.Agent`. The fast tier is the agent's first step, not a bypass.
 When it is confident and the case is low-stakes, the agent stops there; reroutes always go to the
